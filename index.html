@@ -1,0 +1,404 @@
+<html>
+<head>
+  <script src="words-common.js"></script>
+  <script src="words-wooord-hunt.js"></script>
+  <script src="words-names.js"></script>
+  <script src="words-geo.js"></script>
+
+  <script src="utils.js"></script>
+
+  <script>
+    const excludeWordsWithDot = ['Dr.'];
+
+    let knownWordsOld = [];
+    const knownWordsNew = [];
+    const toLearnWords = [];
+    const skipWordsManual = [];
+    const skipWordsAuto = [];
+    const autocorrectedWords = new Set();
+
+    function getAllKnownWords() {
+      return [...new Set([...knownWordsOld, ...knownWordsNew])].sort();
+    }
+
+    if (localStorage.getItem('knownWords')) {
+      try {
+        const parsedLibrary = JSON.parse(localStorage.getItem('knownWords'));
+        if (Array.isArray(parsedLibrary) && parsedLibrary.every(w => typeof w === 'string')) {
+          knownWordsOld = parsedLibrary;
+        }
+      } catch (error) {
+        console.log('--------------------> FAILED TO PARSE local library from storage', error);
+      }
+    }
+
+    function parseSentences(str) {
+      const sentences = [];
+      let sentence = '';
+      for (let i = 0; i < str.length; i++) {
+        sentence += str[i];
+
+        if (str[i + 1] === '.') {
+          continue;
+        }
+
+        if ('.!?'.includes(str[i]) && !excludeWordsWithDot.some(w => sentence.endsWith(w))) {
+          let afterSentencePart = '';
+
+          for (let j = i + 1; j < str.length; j++) {
+            const isLastChar = j === str.length - 1;
+            afterSentencePart += str[j];
+
+            const sanitized = afterSentencePart.replaceAll('\n', '').replaceAll(/[.\s?!\-]/gi, '');
+
+            if (isLastChar || (sanitized.length === 1 && isUpperCase(sanitized) && str[j + 1] !== '.')) {
+              sentences.push(sentence.trim());
+              sentence = '';
+
+              break;
+            }
+
+            if (sanitized.length) {
+              // console.log({ sentence, afterSentencePart });
+              sentence += afterSentencePart;
+              i = j;
+
+              break;
+            }
+          }
+        }
+      }
+
+      return sentences;
+    }
+
+    function parseWordsWithExamples(sentences) {
+      const wordsWithContext = new Map();
+
+      for (const sentence of sentences) {
+        const sanitizedSentence = sentence
+          .replaceAll('...', '')
+          .replaceAll('..', '')
+          .replaceAll(',', '')
+          .replaceAll('?', '')
+          .replaceAll('"', '')
+          .replaceAll('!', '')
+          .replaceAll('- ', ' ');
+
+        const words = sanitizedSentence
+          .split(' ')
+          .reduce((acc, item) => [...acc, ...item.split('\xa0')], [])
+          .filter(word => word && !/^[$\d.,]+$/gm.test(word))
+          .map(w => {
+            const dotsCount = w.split('.').length - 1;
+
+            return excludeWordsWithDot.includes(w) || dotsCount > 1 ? w : w.replaceAll('.', '');
+          });
+
+        for (const word of words) {
+          let key = word.toLowerCase();
+
+          if (key.endsWith('ies')) {
+            key = applyCorrection(key, key.slice(0, key.length - 3) + 'y');
+          }
+
+          if (key.endsWith('s') || key.endsWith('ed') || key.endsWith('es')) {
+            key = applyCorrection(key, key.slice(0, key.length - 1));
+          }
+
+          if (key.endsWith('ed') || key.endsWith('es')) {
+            key = applyCorrection(key, key.slice(0, key.length - 2));
+          }
+
+          if (
+            key.endsWith('ing') ||
+            key.endsWith('\'ve') ||
+            key.endsWith('\'re') ||
+            key.endsWith('\'ll') ||
+            key.endsWith('n\'t')
+          ) {
+            key = applyCorrection(key, key.slice(0, key.length - 3));
+          }
+
+          if (key.endsWith('ing')) {
+            key = applyCorrection(key, key.slice(0, key.length - 3) + 'e');
+          }
+
+          if (key.endsWith('\'s')) {
+            key = key.slice(0, key.length - 2);
+          }
+
+          if (key !== word.toLowerCase()) {
+            autocorrectedWords.add(word.toLowerCase());
+          }
+
+          if (!wordsWithContext.has(key)) {
+            wordsWithContext.set(key, []);
+          }
+
+          wordsWithContext.get(key).push(sentence);
+        }
+      }
+
+      [...wordsWithContext.entries()]
+        .filter(([key, examples]) => !examples.some(e => e.includes(key)))
+        .forEach(([key, examples]) => {
+          const matchingExample = examples.find(e => e.toLowerCase().includes(key.toLowerCase()));
+          if (!matchingExample) {
+            return;
+          }
+
+          const from = matchingExample.toLowerCase().indexOf(key.toLowerCase());
+
+          const correctedKey = matchingExample.slice(from, from + key.length);
+
+          if (!window.wordsCommon.includes(key) && !window.wordsWooordHunt.includes(key)) {
+            wordsWithContext.set(correctedKey, examples);
+            wordsWithContext.delete(key);
+          }
+        });
+
+      if (wordsWithContext.has('i')) {
+        wordsWithContext.set('I', wordsWithContext.get('i'));
+        wordsWithContext.delete('i');
+      }
+
+      [...wordsWithContext.entries()]
+        .filter(([key]) => (
+          isUpperCase(key[0]) &&
+          (window.wordsNames.includes(key) || window.wordsGeo.includes(key))
+        ))
+        .forEach(([key]) => {
+          skipWordsAuto.push(key);
+          wordsWithContext.delete(key);
+        });
+
+      return wordsWithContext;
+    }
+
+    let wordsWithContext = new Map();
+
+    window.readSubs = (subsString, knownWordsList) => {
+      if (knownWordsList) {
+        try {
+          const knownWordsParsed = Array.isArray(knownWordsList) ? knownWordsList : JSON.parse(knownWordsList);
+
+          if (Array.isArray(knownWordsParsed) && knownWordsParsed.every(w => typeof w === 'string')) {
+            knownWordsOld = knownWordsParsed;
+          } else {
+            console.error('INCORRECT FORMAT OF known words list');
+          }
+        } catch (error) {
+          console.error('INCORRECT FORMAT OF known words list', error);
+        }
+      }
+
+      const subs = subsString
+        .replaceAll(/\d+\n\d\d:\d\d:\d\d,\d\d\d --> \d\d:\d\d:\d\d,\d\d\d\n/gi, '')
+        .replaceAll(/<[^>]*>/gi, '')
+        .replaceAll('\n', ' ')
+        .replaceAll('  ', ' ');
+
+      const sentences = parseSentences(subs);
+      wordsWithContext = parseWordsWithExamples(sentences);
+
+      render();
+    };
+
+    function setResultHtml(word, html) {
+      document.getElementById(`wwword-result-${slugify(word)}`).innerHTML = html;
+    }
+
+    function showIframe(word, link, scrollTop) {
+      setResultHtml(
+        word,
+        `
+        <div id="wwword-iframe-${slugify(word)}" style="border-style: inset; border-color: grey; overflow: scroll; height: 500px; width: 100% ">
+          <iframe width="100%" height="300%" src="${link}" />
+        </div>
+        `,
+      );
+
+      if (scrollTop) {
+        const iframeContainer = document.getElementById(`wwword-iframe-${slugify(word)}`);
+        iframeContainer.querySelector('iframe').onload = async () => {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          iframeContainer.scrollTo(0, scrollTop);
+        };
+      }
+
+    }
+
+    function showExamples(word) {
+      setResultHtml(word, [...new Set(wordsWithContext.get(word) || [])].map(sentence => {
+
+        let highlighted = sentence
+          .replaceAll(word, `<b style="color: #bb0000">${word}</b>`)
+          .replaceAll(word.toLowerCase(), `<b style="color: #bb0000">${word.toLowerCase()}</b>`)
+          .replaceAll(word.toUpperCase(), `<b style="color: #bb0000">${word.toUpperCase()}</b>`);
+
+        if (isLowerCase(word[0])) {
+          const replacingWord = word[0].toUpperCase() + word.slice(1, word.length);
+
+          highlighted = highlighted.replaceAll(replacingWord, `<b style="color: #bb0000">${replacingWord}</b>`);
+        }
+
+        return `<p>${highlighted}</p>`;
+      }).join(''));
+    }
+
+    function closeResult(word) {
+      setResultHtml(word, '<br/>');
+    }
+
+    function addToKnown(word) {
+      knownWordsNew.push(word);
+      localStorage.setItem('knownWords', JSON.stringify(getAllKnownWords()))
+
+      render();
+    }
+
+    function addToLearn(word) {
+      toLearnWords.push(word);
+
+      render();
+    }
+
+    function skipWord(word) {
+      skipWordsManual.push(word);
+
+      render();
+    }
+
+    function copyAllKnown() {
+      navigator.clipboard.writeText(JSON.stringify(getAllKnownWords()));
+    }
+
+    function render() {
+      if (!wordsWithContext.size) {
+        document.getElementById('form').style.setProperty('display', 'block');
+        renderForm();
+      } else {
+        document.getElementById('form').style.setProperty('display', 'none');
+        renderRows();
+      }
+    }
+
+    function renderForm() {
+      document.getElementById('form').innerHTML = `
+        <input id="subtitles-file" type="file" />
+      `;
+
+      const input = document.getElementById('subtitles-file');
+      input.addEventListener('change', (...args) => {
+        const file = input.files[0];
+
+        if (!file) {
+          console.log('--------------------> NO FILE is selected');
+          return;
+        }
+
+        let reader = new FileReader();
+        reader.readAsText(file);
+
+        reader.onload = function () {
+          readSubs(reader.result);
+        };
+
+        reader.onerror = function () {
+          console.log('FILE READ error ---> ', reader.error);
+        };
+      }, false);
+    }
+
+    function renderRows() {
+      const sortedWords = [...wordsWithContext.entries()].sort(compareWords);
+      const allKnownWords = getAllKnownWords();
+
+      const alreadyKnown = knownWordsOld.filter(w => sortedWords.find(([word]) => w === word)).length;
+      const toReview = sortedWords.length - alreadyKnown - knownWordsNew.length - toLearnWords.length - skipWordsManual.length;
+
+      document.getElementById('stats').innerHTML = `
+        <div>
+          <h1>Known overall &#129312;: ${knownWordsOld.length}</h1>
+          <h1>Words in this movie &#128579;: ${sortedWords.length + skipWordsAuto.length}</h1>
+          <h1>&nbsp;&nbsp;&nbsp;&nbsp;Already known &#128541;: ${alreadyKnown}</h1>
+          <h1>&nbsp;&nbsp;&nbsp;&nbsp;To review &#128517;: ${toReview}</h1>
+          <h1>&nbsp;&nbsp;&nbsp;&nbsp;Known &#129321;: ${knownWordsNew.length}</h1>
+          <h1>&nbsp;&nbsp;&nbsp;&nbsp;To learn &#129299;: ${toLearnWords.length}</h1>
+          <h1>&nbsp;&nbsp;&nbsp;&nbsp;Skipped &#129325;: ${skipWordsManual.length}</h1>
+          <h1>&nbsp;&nbsp;&nbsp;&nbsp;Skipped (auto)&#128511;&&#128509;: ${skipWordsAuto.length}</h1>
+        </div>
+      `;
+
+      document.getElementById('words').innerHTML = sortedWords
+        .filter(([word]) => !(
+          allKnownWords.includes(word) ||
+          toLearnWords.includes(word) ||
+          skipWordsManual.includes(word)
+        ))
+        .map(
+          ([word, examples]) => `
+            <div id="wwword-${slugify(word)}">
+              <h3>${examples.length}x   ${word}</h3>
+              <button onclick="showExamples('${escape(word)}') ">Examples</button>
+
+              <button onclick="showIframe('${escape(word)}', 'https://wooordhunt.ru/word/${escape(word)}', 250) ">Wooord Hunt</button>
+              <button onclick="showIframe('${escape(word)}', 'https://thesaurus.com/browse/${escape(word)}', 150) ">Thesaurus</button>
+              <button onclick="closeResult('${escape(word)}') ">Close</button>
+&nbsp;&nbsp;&nbsp;&nbsp;
+              <button onclick="addToKnown('${escape(word)}') ">I know &#129321;</button>
+              <button onclick="addToLearn('${escape(word)}') ">To learn &#129299;</button>
+              <button onclick="skipWord('${escape(word)}') ">Skip &#129325;</button>
+
+              <div id="wwword-result-${slugify(word)}"></div>
+            </div>
+            `,
+        )
+        .join('');
+
+      document.getElementById('wordsProcessed').innerHTML = `
+        <div>
+          <h1>To learn &#129299;:</h1>
+          <div>${JSON.stringify(toLearnWords, undefined, 2)}</div>
+        </div>
+        <div>
+          <h1>New known words &#129321;:</h1>
+          <div>${JSON.stringify(knownWordsNew, undefined, 2)}</div>
+        </div>
+        <div>
+          <h1>All I know (for backup &#128519;):</h1>
+          <div>
+            <div><button onclick="copyAllKnown()">Copy all</button></div>
+            <pre>${JSON.stringify(allKnownWords, undefined, 2)}</pre>
+          </div>
+        </div>
+        <div>
+          <h1>These I knew from other movies &#128521;:</h1>
+          <div>${JSON.stringify(skipWordsManual, undefined, 2)}</div>
+        </div>
+        <div>
+          <h1>Skipped &#129325;:</h1>
+          <div>${JSON.stringify(skipWordsManual, undefined, 2)}</div>
+        </div>
+        <div>
+          <h1>Skipped auto &#128511; & &#128509;:</h1>
+          <div>${JSON.stringify(skipWordsAuto, undefined, 2)}</div>
+        </div>
+        <div>
+          <h1>Autocorrected words &#129488;:</h1>
+          <div>${JSON.stringify([...autocorrectedWords].sort(), undefined, 2)}</div>
+        </div>
+      `;
+    }
+
+    window.onload = () => render();
+  </script>
+</head>
+<body>
+<div id="form" style="display: block"></div>
+<div id="stats"></div>
+<div id="words"></div>
+<div id="wordsProcessed"></div>
+</body>
+</html>
