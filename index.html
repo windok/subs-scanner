@@ -106,7 +106,7 @@
             key = applyCorrection(key, key.slice(0, key.length - 1));
           }
 
-          if (key.endsWith('ed') || key.endsWith('es')) {
+          if (key.endsWith('ed') || key.endsWith('es') || key.endsWith('\'d')) {
             key = applyCorrection(key, key.slice(0, key.length - 2));
           }
 
@@ -194,10 +194,12 @@
       }
 
       const subs = subsString
-        .replaceAll(/\d+\n\d\d:\d\d:\d\d,\d\d\d --> \d\d:\d\d:\d\d,\d\d\d\n/gi, '')
+        .replaceAll(/^\d+$/gmi, '')
+        .replaceAll(/^\d\d:\d\d:\d\d,\d\d\d --> \d\d:\d\d:\d\d,\d\d\d$/gmi, '')
         .replaceAll(/<[^>]*>/gi, '')
         .replaceAll('\n', ' ')
-        .replaceAll('  ', ' ');
+        .replaceAll('\r', ' ')
+        .replaceAll('  ', ' ').replaceAll('  ', ' ').replaceAll('  ', ' ');
 
       const sentences = parseSentences(subs);
       wordsWithContext = parseWordsWithExamples(sentences);
@@ -315,14 +317,14 @@
       const sortedWords = [...wordsWithContext.entries()].sort(compareWords);
       const allKnownWords = getAllKnownWords();
 
-      const alreadyKnown = knownWordsOld.filter(w => sortedWords.find(([word]) => w === word)).length;
-      const toReview = sortedWords.length - alreadyKnown - knownWordsNew.length - toLearnWords.length - skipWordsManual.length;
+      const alreadyKnown = knownWordsOld.filter(w => sortedWords.find(([word]) => w === word)).sort();
+      const toReview = sortedWords.length - alreadyKnown.length - knownWordsNew.length - toLearnWords.length - skipWordsManual.length;
 
       document.getElementById('stats').innerHTML = `
         <div>
           <h1>Known overall &#129312;: ${knownWordsOld.length}</h1>
           <h1>Words in this movie &#128579;: ${sortedWords.length + skipWordsAuto.length}</h1>
-          <h1>&nbsp;&nbsp;&nbsp;&nbsp;Already known &#128541;: ${alreadyKnown}</h1>
+          <h1>&nbsp;&nbsp;&nbsp;&nbsp;Already known &#128541;: ${alreadyKnown.length}</h1>
           <h1>&nbsp;&nbsp;&nbsp;&nbsp;To review &#128517;: ${toReview}</h1>
           <h1>&nbsp;&nbsp;&nbsp;&nbsp;Known &#129321;: ${knownWordsNew.length}</h1>
           <h1>&nbsp;&nbsp;&nbsp;&nbsp;To learn &#129299;: ${toLearnWords.length}</h1>
@@ -375,7 +377,7 @@
         </div>
         <div>
           <h1>These I knew from other movies &#128521;:</h1>
-          <div>${JSON.stringify(skipWordsManual, undefined, 2)}</div>
+          <div>${JSON.stringify(alreadyKnown, undefined, 2)}</div>
         </div>
         <div>
           <h1>Skipped &#129325;:</h1>
