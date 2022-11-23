@@ -1,6 +1,7 @@
 <html>
 <head>
   <title>&#128049; Kitten's movies word parser and vocabulary</title>
+  <link rel="shortcut icon" type="image/x-icon" href="favicon.ico">
 
   <script src="words-common.js"></script>
   <script src="words-wooord-hunt.js"></script>
@@ -12,26 +13,47 @@
   <script>
     const excludeWordsWithDot = ['Dr.'];
 
-    let knownWordsOld = [];
+    function readBackup(key) {
+      let backupWords = [];
+
+      if (localStorage.getItem(key)) {
+        try {
+          const parsedBackup = JSON.parse(localStorage.getItem(key));
+
+          if (Array.isArray(parsedBackup) && parsedBackup.every(w => typeof w === 'string')) {
+            backupWords = parsedBackup;
+          }
+        } catch (error) {
+          console.log('--------------------> FAILED TO PARSE local library from storage', error);
+        }
+      }
+
+      return backupWords;
+    }
+
+    function writeBackup(key, words) {
+      localStorage.setItem(key, JSON.stringify([...new Set(words.filter(Boolean))].sort()));
+    }
+
+    let wordsWithContext = new Map();
+
+    let knownWordsOld = readBackup('knownWords');
     const knownWordsNew = [];
-    const toLearnWords = [];
-    const skipWordsManual = [];
+
+    const skipWordsManualOld = readBackup('skippedWords');
+    const skipWordsManualNew = [];
+
+    const toLearnWordsOld = readBackup('toLearnWords');
+    const toLearnWordsNew = [];
+
+    const skipWordsAutoFromMyList = [];
     const skipWordsAuto = [];
+    const alreadyKnownAuto = [];
+    const toLearnWordsDuplicates = [];
     const autocorrectedWords = new Set();
 
     function getAllKnownWords() {
       return [...new Set([...knownWordsOld, ...knownWordsNew])].sort();
-    }
-
-    if (localStorage.getItem('knownWords')) {
-      try {
-        const parsedLibrary = JSON.parse(localStorage.getItem('knownWords'));
-        if (Array.isArray(parsedLibrary) && parsedLibrary.every(w => typeof w === 'string')) {
-          knownWordsOld = parsedLibrary;
-        }
-      } catch (error) {
-        console.log('--------------------> FAILED TO PARSE local library from storage', error);
-      }
     }
 
     function parseSentences(str) {
@@ -100,7 +122,7 @@
         for (const word of words) {
           let key = word.toLowerCase();
 
-          if (key.endsWith('ies')) {
+          if (key.endsWith('ies') || key.endsWith('ied')) {
             key = applyCorrection(key, key.slice(0, key.length - 3) + 'y');
           }
 
@@ -166,19 +188,32 @@
       }
 
       [...wordsWithContext.entries()]
-        .filter(([key]) => (
-          isUpperCase(key[0]) &&
-          (window.wordsNames.includes(key) || window.wordsGeo.includes(key))
-        ))
         .forEach(([key]) => {
-          skipWordsAuto.push(key);
-          wordsWithContext.delete(key);
+          if (
+            isUpperCase(key[0]) &&
+            (window.wordsNames.includes(key) || window.wordsGeo.includes(key))
+          ) {
+            skipWordsAuto.push(key);
+            wordsWithContext.delete(key);
+          }
+
+          if (skipWordsManualOld.includes(key)) {
+            skipWordsAutoFromMyList.push(key);
+            wordsWithContext.delete(key);
+          }
+
+          if (knownWordsOld.includes(key)) {
+            alreadyKnownAuto.push(key);
+            wordsWithContext.delete(key);
+          }
+
+          if (toLearnWordsOld.includes(key)) {
+            toLearnWordsDuplicates.push(key);
+          }
         });
 
       return wordsWithContext;
     }
-
-    let wordsWithContext = new Map();
 
     window.readSubs = (subsString, knownWordsList) => {
       if (knownWordsList) {
@@ -257,19 +292,31 @@
 
     function addToKnown(word) {
       knownWordsNew.push(word);
-      localStorage.setItem('knownWords', JSON.stringify(getAllKnownWords()))
+      wordsWithContext.delete(word);
+
+      if (toLearnWordsOld.includes(word) || toLearnWordsNew.includes(word)) {
+        const allToLearnWords = toLearnWordsOld.concat(toLearnWordsNew);
+
+        writeBackup('toLearnWords', allToLearnWords.filter(w => w !== word));
+      }
+
+      writeBackup('knownWords', getAllKnownWords());
 
       render();
     }
 
     function addToLearn(word) {
-      toLearnWords.push(word);
+      toLearnWordsNew.push(word);
+      wordsWithContext.delete(word);
+      writeBackup('toLearnWords', toLearnWordsOld.concat(toLearnWordsNew));
 
       render();
     }
 
     function skipWord(word) {
-      skipWordsManual.push(word);
+      skipWordsManualNew.push(word);
+      wordsWithContext.delete(word);
+      writeBackup('skippedWords', skipWordsManualOld.concat(skipWordsManualNew));
 
       render();
     }
@@ -317,34 +364,45 @@
 
     function renderRows() {
       const sortedWords = [...wordsWithContext.entries()].sort(compareWords);
-      const allKnownWords = getAllKnownWords();
 
-      const alreadyKnown = knownWordsOld.filter(w => sortedWords.find(([word]) => w === word)).sort();
-      const toReview = sortedWords.length - alreadyKnown.length - knownWordsNew.length - toLearnWords.length - skipWordsManual.length;
+      const allMovieWordsCount = (
+        sortedWords.length +
+        skipWordsAuto.length +
+        skipWordsAutoFromMyList.length +
+        alreadyKnownAuto.length +
+        toLearnWordsNew.length +
+        knownWordsNew.length +
+        skipWordsManualNew.length
+      );
 
       document.getElementById('stats').innerHTML = `
         <div>
-          <h1>Known overall &#129312;: ${knownWordsOld.length}</h1>
-          <h1>Words in this movie &#128579;: ${sortedWords.length + skipWordsAuto.length}</h1>
-          <h1>&nbsp;&nbsp;&nbsp;&nbsp;Already known &#128541;: ${alreadyKnown.length}</h1>
-          <h1>&nbsp;&nbsp;&nbsp;&nbsp;To review &#128517;: ${toReview}</h1>
-          <h1>&nbsp;&nbsp;&nbsp;&nbsp;Known &#129321;: ${knownWordsNew.length}</h1>
-          <h1>&nbsp;&nbsp;&nbsp;&nbsp;To learn &#129299;: ${toLearnWords.length}</h1>
-          <h1>&nbsp;&nbsp;&nbsp;&nbsp;Skipped &#129325;: ${skipWordsManual.length}</h1>
-          <h1>&nbsp;&nbsp;&nbsp;&nbsp;Skipped (auto)&#128511;&&#128509;: ${skipWordsAuto.length}</h1>
+          <h2>Overall Progress so far &#128520;</h2>
+          <h3>&nbsp;&nbsp;&nbsp;&nbsp;Known &#129312;: ${knownWordsOld.length}</h3>
+          <h3>&nbsp;&nbsp;&nbsp;&nbsp;To learn &#129299;: ${toLearnWordsOld.length}</h3>
+          <h3>&nbsp;&nbsp;&nbsp;&nbsp;Skipped &#129325;: ${skipWordsManualOld.length}</h3>
+
+          <h2>Words in this movie &#128579;: ${allMovieWordsCount}</h2>
+          <h3>&nbsp;&nbsp;&nbsp;&nbsp;Already known &#128541;: ${alreadyKnownAuto.length}</h3>
+          <h3>&nbsp;&nbsp;&nbsp;&nbsp;Already marked to learn &#128541;: ${toLearnWordsDuplicates.length}</h3>
+          <h3>&nbsp;&nbsp;&nbsp;&nbsp;To review &#128517;: ${sortedWords.length}</h3>
+          <h3>&nbsp;&nbsp;&nbsp;&nbsp;Known &#129321;: ${knownWordsNew.length}</h3>
+          <h3>&nbsp;&nbsp;&nbsp;&nbsp;To learn &#129299;: ${toLearnWordsNew.length}</h3>
+          <h3>&nbsp;&nbsp;&nbsp;&nbsp;Skipped &#129325;: ${skipWordsManualNew.length}</h3>
+          <h3>&nbsp;&nbsp;&nbsp;&nbsp;Skipped from my list (auto)&#129322;: ${skipWordsAutoFromMyList.length}</h3>
+          <h3>&nbsp;&nbsp;&nbsp;&nbsp;Skipped (auto)&#128511;&&#128509;: ${skipWordsAuto.length}</h3>
         </div>
       `;
 
-      document.getElementById('words').innerHTML = sortedWords
-        .filter(([word]) => !(
-          allKnownWords.includes(word) ||
-          toLearnWords.includes(word) ||
-          skipWordsManual.includes(word)
-        ))
-        .map(
-          ([word, examples]) => `
+      document.getElementById('words').innerHTML = sortedWords.map(
+        ([word, examples]) => {
+          const labelToLearnDuplicate = toLearnWordsDuplicates.includes(word)
+            ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #850000">("to-learn" duplicate)</span>`
+            : ''
+
+          return `
             <div id="wwword-${slugify(word)}">
-              <h3>${examples.length}x   ${word}</h3>
+              <h3>${examples.length}x   ${word} ${labelToLearnDuplicate}</h3>
               <button onclick="showExamples('${escape(word)}') ">Examples</button>
 
               <button onclick="showIframe('${escape(word)}', 'https://wooordhunt.ru/word/${escape(word)}', 250) ">Wooord Hunt</button>
@@ -357,14 +415,15 @@
 
               <div id="wwword-result-${slugify(word)}"></div>
             </div>
-            `,
-        )
+            `
+        },
+      )
         .join('');
 
       document.getElementById('wordsProcessed').innerHTML = `
         <div>
           <h1>To learn &#129299;:</h1>
-          <div>${JSON.stringify(toLearnWords, undefined, 2)}</div>
+          <div>${JSON.stringify(toLearnWordsNew, undefined, 2)}</div>
         </div>
         <div>
           <h1>New known words &#129321;:</h1>
@@ -374,16 +433,24 @@
           <h1>All I know (for backup &#128519;):</h1>
           <div>
             <div><button onclick="copyAllKnown()">Copy all</button></div>
-            <pre>${JSON.stringify(allKnownWords, undefined, 2)}</pre>
+            <div>${JSON.stringify(getAllKnownWords(), undefined, 2)}</div>
           </div>
         </div>
         <div>
           <h1>These I knew from other movies &#128521;:</h1>
-          <div>${JSON.stringify(alreadyKnown, undefined, 2)}</div>
+          <div>${JSON.stringify(alreadyKnownAuto, undefined, 2)}</div>
+        </div>
+        <div>
+          <h1>Review to learn words from other movies &#129300;:</h1>
+          <div>${JSON.stringify(toLearnWordsOld, undefined, 2)}</div>
         </div>
         <div>
           <h1>Skipped &#129325;:</h1>
-          <div>${JSON.stringify(skipWordsManual, undefined, 2)}</div>
+          <div>${JSON.stringify(skipWordsManualNew, undefined, 2)}</div>
+        </div>
+        <div>
+          <h1>Skipped from my list (auto)&#129322;:</h1>
+          <div>${JSON.stringify(skipWordsAutoFromMyList, undefined, 2)}</div>
         </div>
         <div>
           <h1>Skipped auto &#128511; & &#128509;:</h1>
