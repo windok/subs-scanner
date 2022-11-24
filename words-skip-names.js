@@ -1,4 +1,4 @@
-window.wordsNames = [
+window.wordsSkipNames = [
   'Aarav',
   'Aaron',
   'Aaron',

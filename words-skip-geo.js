@@ -1,4 +1,4 @@
-window.wordsGeo = [
+window.wordsSkipGeo = [
   'Afghanistan',
   'Albania',
   'Algeria',

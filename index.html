@@ -4,9 +4,11 @@
   <link rel="shortcut icon" type="image/x-icon" href="favicon.ico">
 
   <script src="words-common.js"></script>
+  <script src="words-irregular-verbs.js"></script>
   <script src="words-wooord-hunt.js"></script>
-  <script src="words-names.js"></script>
-  <script src="words-geo.js"></script>
+  <script src="words-skip-common.js"></script>
+  <script src="words-skip-names.js"></script>
+  <script src="words-skip-geo.js"></script>
 
   <script src="utils.js"></script>
 
@@ -105,8 +107,11 @@
           .replaceAll('..', '')
           .replaceAll(',', '')
           .replaceAll('?', '')
-          .replaceAll('"', '')
           .replaceAll('!', '')
+          .replaceAll('"', '')
+          .replaceAll('\'\'', '')
+          .replaceAll(';', '')
+          .replaceAll(':', '')
           .replaceAll('- ', ' ');
 
         const words = sanitizedSentence
@@ -191,7 +196,11 @@
         .forEach(([key]) => {
           if (
             isUpperCase(key[0]) &&
-            (window.wordsNames.includes(key) || window.wordsGeo.includes(key))
+            (
+              window.wordsSkipCommon.includes(key) ||
+              window.wordsSkipNames.includes(key) ||
+              window.wordsSkipGeo.includes(key)
+            )
           ) {
             skipWordsAuto.push(key);
             wordsWithContext.delete(key);
@@ -398,11 +407,19 @@
         ([word, examples]) => {
           const labelToLearnDuplicate = toLearnWordsDuplicates.includes(word)
             ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #850000">("to-learn" duplicate)</span>`
-            : ''
+            : '';
+          const matchingIrregularVerbs = window.wordsIrregularVerbs
+            .filter(
+              forms => forms.some(form => form.split('(').shift().trim() === word || form.split('/').includes(word))
+            )
+            .map(forms => forms.join(' - '));
+          const labelIrregularVerb = matchingIrregularVerbs.length
+            ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #177000">(${matchingIrregularVerbs.join('; ')})</span>`
+            : '';
 
           return `
             <div id="wwword-${slugify(word)}">
-              <h3>${examples.length}x   ${word} ${labelToLearnDuplicate}</h3>
+              <h3>${examples.length}x   ${word} ${labelIrregularVerb} ${labelToLearnDuplicate}</h3>
               <button onclick="showExamples('${escape(word)}') ">Examples</button>
 
               <button onclick="showIframe('${escape(word)}', 'https://wooordhunt.ru/word/${escape(word)}', 250) ">Wooord Hunt</button>
