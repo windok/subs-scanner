@@ -1311,7 +1311,6 @@ window.wordsCommon = [
   'murder',
   'tape',
   'burn',
-  'means',
   'aware',
   'mistake',
   'quiet',

@@ -1,4 +1,4 @@
-window.wordsSkipGeo = [
+window.wordsExcludeGeo = [
   'Afghanistan',
   'Albania',
   'Algeria',

@@ -1,4 +1,4 @@
-window.wordsSkipNames = [
+window.wordsExcludeNames = [
   'Aarav',
   'Aaron',
   'Aaron',
@@ -1195,4 +1195,27 @@ window.wordsSkipNames = [
   'Zyair',
   'Zyaire',
   'Zyon',
+
+  'Annia',
+  'Annie',
+  'Atlantic',
+  'Atlantis',
+  'Brucie',
+  'Coney',
+  'Cuddy',
+  'Ellie',
+  'Ernie',
+  'Gertie',
+  'Greg',
+  'Herbert',
+  'Hilton',
+  'Jackie',
+  'Juanita',
+  'Mallory',
+  'Mantleray',
+  'McDougal',
+  'Ollie',
+  'Roosevelt',
+  'Sigmund',
+  'Wendy',
 ];

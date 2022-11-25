@@ -1,4 +1,4 @@
-window.wordsSkipCommon = [
+window.wordsExcludeCommon = [
   // 'A',
   // 'a',
   'B',

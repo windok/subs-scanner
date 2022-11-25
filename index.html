@@ -40,23 +40,22 @@
     let wordsWithContext = new Map();
 
     let knownWordsOld = readBackup('knownWords');
-    const knownWordsNew = [];
+    let knownWordsNew = [];
 
-    const skipWordsManualOld = readBackup('skippedWords');
-    const skipWordsManualNew = [];
+    let excludeWordsManualOld = readBackup('excludeWords');
+    let excludeWordsManualNew = [];
 
-    const toLearnWordsOld = readBackup('toLearnWords');
-    const toLearnWordsNew = [];
+    let toLearnWordsOld = readBackup('toLearnWords');
+    let toLearnWordsNew = [];
 
-    const skipWordsAutoFromMyList = [];
-    const skipWordsAuto = [];
-    const alreadyKnownAuto = [];
-    const toLearnWordsDuplicates = [];
-    const autocorrectedWords = new Set();
+    const skipWordsManual = [];
+    const skipWordsAutoFromMyExcludeList = [];
+    const skipWordsAutoFromCommonExcludeList = [];
 
-    function getAllKnownWords() {
-      return [...new Set([...knownWordsOld, ...knownWordsNew])].sort();
-    }
+    let alreadyKnownAuto = [];
+    let toReviewAlreadyKnownDuplicates = [];
+    let toLearnWordsDuplicates = [];
+    let autocorrectedWords = [];
 
     function parseSentences(str) {
       const sentences = [];
@@ -100,6 +99,7 @@
 
     function parseWordsWithExamples(sentences) {
       const wordsWithContext = new Map();
+      const autocorrectedWordsUnique = new Set();
 
       for (const sentence of sentences) {
         const sanitizedSentence = sentence
@@ -158,7 +158,7 @@
           }
 
           if (key !== word.toLowerCase()) {
-            autocorrectedWords.add(word.toLowerCase());
+            autocorrectedWordsUnique.add(word.toLowerCase());
           }
 
           if (!wordsWithContext.has(key)) {
@@ -172,14 +172,17 @@
       [...wordsWithContext.entries()]
         .filter(([key, examples]) => !examples.some(e => e.includes(key)))
         .forEach(([key, examples]) => {
-          const matchingExample = examples.find(e => e.toLowerCase().includes(key.toLowerCase()));
-          if (!matchingExample) {
+          // because of applied autocorrection some variants might have changed
+          const matchingExamples = examples.filter(e => e.toLowerCase().includes(key.toLowerCase()));
+          if (!matchingExamples.length) {
             return;
           }
 
-          const from = matchingExample.toLowerCase().indexOf(key.toLowerCase());
-
-          const correctedKey = matchingExample.slice(from, from + key.length);
+          const correctedKeys = matchingExamples.map(example => {
+            const from = example.toLowerCase().indexOf(key.toLowerCase());
+            return example.slice(from, from + key.length);
+          });
+          const correctedKey = correctedKeys.find(c => c !== key.toUpperCase()) || correctedKeys[0]
 
           if (!window.wordsCommon.includes(key) && !window.wordsWooordHunt.includes(key)) {
             wordsWithContext.set(correctedKey, examples);
@@ -192,34 +195,47 @@
         wordsWithContext.delete('i');
       }
 
-      [...wordsWithContext.entries()]
-        .forEach(([key]) => {
+      [...wordsWithContext.keys()]
+        .forEach(key => {
           if (
-            isUpperCase(key[0]) &&
+              window.wordsExcludeCommon.includes(key) ||
             (
-              window.wordsSkipCommon.includes(key) ||
-              window.wordsSkipNames.includes(key) ||
-              window.wordsSkipGeo.includes(key)
+              isUpperCase(key[0]) &&
+              (window.wordsExcludeNames.includes(key) || window.wordsExcludeGeo.includes(key))
             )
           ) {
-            skipWordsAuto.push(key);
+            skipWordsAutoFromCommonExcludeList.push(key);
             wordsWithContext.delete(key);
           }
 
-          if (skipWordsManualOld.includes(key)) {
-            skipWordsAutoFromMyList.push(key);
+          if (excludeWordsManualOld.includes(key)) {
+            skipWordsAutoFromMyExcludeList.push(key);
             wordsWithContext.delete(key);
           }
 
           if (knownWordsOld.includes(key)) {
             alreadyKnownAuto.push(key);
-            wordsWithContext.delete(key);
           }
 
           if (toLearnWordsOld.includes(key)) {
             toLearnWordsDuplicates.push(key);
           }
         });
+
+      toReviewAlreadyKnownDuplicates = alreadyKnownAuto
+        .filter(key => wordsWithContext.get(key).length <= 20)
+        .sort(() => Math.random() - 0.6) // simple shuffle
+        .sort(() => Math.random() - 0.5)
+        .sort(() => Math.random() - 0.4)
+        .slice(0, 20);
+
+      [...wordsWithContext.keys()].forEach(key => {
+        if (alreadyKnownAuto.includes(key) && !toReviewAlreadyKnownDuplicates.includes(key)) {
+          wordsWithContext.delete(key);
+        }
+      });
+
+      autocorrectedWords = [...autocorrectedWordsUnique].sort();
 
       return wordsWithContext;
     }
@@ -299,39 +315,77 @@
       setResultHtml(word, '<br/>');
     }
 
+    // lists: toLearnWords, knownWords, excludeWords
+    function sanitizeLists(word) {
+      const notEqualToWord = w => w !== word;
+
+      if (toLearnWordsOld.includes(word) || toLearnWordsNew.includes(word)) {
+        toLearnWordsDuplicates = toLearnWordsDuplicates.filter(notEqualToWord);
+        toLearnWordsOld = toLearnWordsOld.filter(notEqualToWord);
+        toLearnWordsNew = toLearnWordsNew.filter(notEqualToWord);
+
+        writeBackup('toLearnWords', [...toLearnWordsOld, ...toLearnWordsNew]);
+      }
+
+      if (knownWordsOld.includes(word) || knownWordsNew.includes(word)) {
+        toReviewAlreadyKnownDuplicates = toReviewAlreadyKnownDuplicates.filter(notEqualToWord);
+        alreadyKnownAuto = alreadyKnownAuto.filter(notEqualToWord);
+        knownWordsOld = knownWordsOld.filter(notEqualToWord);
+        knownWordsNew = knownWordsNew.filter(notEqualToWord);
+
+        writeBackup('knownWords', [...knownWordsOld, ...knownWordsOld]);
+      }
+
+      if (excludeWordsManualOld.includes(word) || excludeWordsManualNew.includes(word)) {
+        excludeWordsManualOld = excludeWordsManualOld.filter(notEqualToWord);
+        excludeWordsManualNew = excludeWordsManualNew.filter(notEqualToWord);
+
+        writeBackup('excludeWords', [...excludeWordsManualOld, ...excludeWordsManualNew]);
+      }
+    }
+
     function addToKnown(word) {
+      sanitizeLists(word);
+
       knownWordsNew.push(word);
       wordsWithContext.delete(word);
 
-      if (toLearnWordsOld.includes(word) || toLearnWordsNew.includes(word)) {
-        const allToLearnWords = toLearnWordsOld.concat(toLearnWordsNew);
-
-        writeBackup('toLearnWords', allToLearnWords.filter(w => w !== word));
-      }
-
-      writeBackup('knownWords', getAllKnownWords());
+      writeBackup('knownWords', [...knownWordsOld, ...knownWordsNew]);
 
       render();
     }
 
     function addToLearn(word) {
+      sanitizeLists(word);
+
       toLearnWordsNew.push(word);
       wordsWithContext.delete(word);
-      writeBackup('toLearnWords', toLearnWordsOld.concat(toLearnWordsNew));
+
+      writeBackup('toLearnWords', [...toLearnWordsOld, ...toLearnWordsNew]);
+
+      render();
+    }
+
+    function excludeWord(word) {
+      sanitizeLists(word);
+
+      excludeWordsManualNew.push(word);
+      wordsWithContext.delete(word);
+
+      writeBackup('excludeWords', [...excludeWordsManualOld, ...excludeWordsManualNew]);
 
       render();
     }
 
     function skipWord(word) {
-      skipWordsManualNew.push(word);
+      skipWordsManual.push(word);
       wordsWithContext.delete(word);
-      writeBackup('skippedWords', skipWordsManualOld.concat(skipWordsManualNew));
 
       render();
     }
 
     function copyAllKnown() {
-      navigator.clipboard.writeText(JSON.stringify(getAllKnownWords()));
+      navigator.clipboard.writeText(JSON.stringify([...knownWordsOld, ...knownWordsNew].sort()));
     }
 
     function render() {
@@ -376,50 +430,71 @@
 
       const allMovieWordsCount = (
         sortedWords.length +
-        skipWordsAuto.length +
-        skipWordsAutoFromMyList.length +
+        skipWordsAutoFromCommonExcludeList.length +
+        skipWordsAutoFromMyExcludeList.length +
         alreadyKnownAuto.length +
         toLearnWordsNew.length +
         knownWordsNew.length +
-        skipWordsManualNew.length
+        excludeWordsManualNew.length +
+        skipWordsManual.length
+      );
+      const toReview = (
+        sortedWords.length +
+        toReviewAlreadyKnownDuplicates.length +
+        toLearnWordsDuplicates.length
       );
 
       document.getElementById('stats').innerHTML = `
         <div>
           <h2>Overall Progress so far &#128520;</h2>
-          <h3>&nbsp;&nbsp;&nbsp;&nbsp;Known &#129312;: ${knownWordsOld.length}</h3>
-          <h3>&nbsp;&nbsp;&nbsp;&nbsp;To learn &#129299;: ${toLearnWordsOld.length}</h3>
-          <h3>&nbsp;&nbsp;&nbsp;&nbsp;Skipped &#129325;: ${skipWordsManualOld.length}</h3>
+          <div style="display: flex;">
+            <span style="flex: 1; text-align: left; ">Known &#129312;: ${knownWordsOld.length}</span>
+            <span style="flex: 1; text-align: left; ">To learn &#129299;: ${toLearnWordsOld.length}</span>
+            <span style="flex: 1; text-align: left; ">Excluded &#9940;: ${excludeWordsManualOld.length}</span>
+            <span style="flex: 1; text-align: left; ">&nbsp;</span>
+            <span style="flex: 1; text-align: left; ">&nbsp;</span>
+          </div>
 
           <h2>Words in this movie &#128579;: ${allMovieWordsCount}</h2>
-          <h3>&nbsp;&nbsp;&nbsp;&nbsp;Already known &#128541;: ${alreadyKnownAuto.length}</h3>
-          <h3>&nbsp;&nbsp;&nbsp;&nbsp;Already marked to learn &#128541;: ${toLearnWordsDuplicates.length}</h3>
-          <h3>&nbsp;&nbsp;&nbsp;&nbsp;To review &#128517;: ${sortedWords.length}</h3>
-          <h3>&nbsp;&nbsp;&nbsp;&nbsp;Known &#129321;: ${knownWordsNew.length}</h3>
-          <h3>&nbsp;&nbsp;&nbsp;&nbsp;To learn &#129299;: ${toLearnWordsNew.length}</h3>
-          <h3>&nbsp;&nbsp;&nbsp;&nbsp;Skipped &#129325;: ${skipWordsManualNew.length}</h3>
-          <h3>&nbsp;&nbsp;&nbsp;&nbsp;Skipped from my list (auto)&#129322;: ${skipWordsAutoFromMyList.length}</h3>
-          <h3>&nbsp;&nbsp;&nbsp;&nbsp;Skipped (auto)&#128511;&&#128509;: ${skipWordsAuto.length}</h3>
+          <div style="display: flex;">
+            <span style="flex: 1; text-align: left; ">Already known &#129312;: ${alreadyKnownAuto.length}</span>
+            <span style="flex: 1; text-align: left; ">Already set to learn &#129300;: ${toLearnWordsDuplicates.length}</span>
+            <span style="flex: 1; text-align: left; ">Excluded (my list)&#129322;: ${skipWordsAutoFromMyExcludeList.length}</span>
+            <span style="flex: 1; text-align: left; ">Excluded (auto)&#128511;&&#128509;: ${skipWordsAutoFromCommonExcludeList.length}</span>
+            <span style="flex: 1; text-align: left; ">&nbsp;</span>
+          </div>
+          <div style="display: flex;">
+            <span style="flex: 1; text-align: left; ">To review &#128517;: ${toReview}</span>
+            <span style="flex: 1; text-align: left; ">Known &#129321;: ${knownWordsNew.length}</span>
+            <span style="flex: 1; text-align: left; ">To learn &#129299;: ${toLearnWordsNew.length}</span>
+            <span style="flex: 1; text-align: left; ">Exluded &#9940;: ${excludeWordsManualNew.length}</span>
+            <span style="flex: 1; text-align: left; ">Skipped &#129325;: ${skipWordsManual.length}</span>
+          </div>
         </div>
       `;
 
       document.getElementById('words').innerHTML = sortedWords.map(
         ([word, examples]) => {
-          const labelToLearnDuplicate = toLearnWordsDuplicates.includes(word)
-            ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #850000">("to-learn" duplicate)</span>`
-            : '';
           const matchingIrregularVerbs = window.wordsIrregularVerbs
             .filter(
-              forms => forms.some(form => form.split('(').shift().trim() === word || form.split('/').includes(word))
+              forms => forms.some(form => form.split('(').shift().trim() === word || form.split('/').includes(word)),
             )
             .map(forms => forms.join(' - '));
           const labelIrregularVerb = matchingIrregularVerbs.length
-            ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #177000">(${matchingIrregularVerbs.join('; ')})</span>`
+            ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #002370">(${matchingIrregularVerbs.join('; ')})</span>`
+            : '';
+
+          const labelToLearnDuplicate = toLearnWordsDuplicates.includes(word)
+            ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #850000">(Already marked 'To learn &#129299;' previously)</span>`
+            : '';
+
+          const labelToReviewAgain = toReviewAlreadyKnownDuplicates.includes(word)
+            ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #196700">(Review again word that you know &#129321;)</span>`
             : '';
 
           return `
             <div id="wwword-${slugify(word)}">
-              <h3>${examples.length}x   ${word} ${labelIrregularVerb} ${labelToLearnDuplicate}</h3>
+              <h3>${examples.length}x   ${word} ${labelIrregularVerb} ${labelToLearnDuplicate} ${labelToReviewAgain}</h3>
               <button onclick="showExamples('${escape(word)}') ">Examples</button>
 
               <button onclick="showIframe('${escape(word)}', 'https://wooordhunt.ru/word/${escape(word)}', 250) ">Wooord Hunt</button>
@@ -428,55 +503,43 @@
 &nbsp;&nbsp;&nbsp;&nbsp;
               <button onclick="addToKnown('${escape(word)}') ">I know &#129321;</button>
               <button onclick="addToLearn('${escape(word)}') ">To learn &#129299;</button>
+              <button onclick="excludeWord('${escape(word)}') ">Exclude &#9940;</button>
               <button onclick="skipWord('${escape(word)}') ">Skip &#129325;</button>
 
               <div id="wwword-result-${slugify(word)}"></div>
             </div>
-            `
+            `;
         },
       )
         .join('');
 
+      const renderJsonWordsRow = (title, words) => `
+        <div>
+          <h1>${title}</h1>
+          <div>${JSON.stringify(words)}</div>
+        </div>
+      `
+
       document.getElementById('wordsProcessed').innerHTML = `
-        <div>
-          <h1>To learn &#129299;:</h1>
-          <div>${JSON.stringify(toLearnWordsNew, undefined, 2)}</div>
-        </div>
-        <div>
-          <h1>New known words &#129321;:</h1>
-          <div>${JSON.stringify(knownWordsNew, undefined, 2)}</div>
-        </div>
+        ${renderJsonWordsRow('New known words &#129321;',  knownWordsNew)}
+        ${renderJsonWordsRow('To learn &#129299;:',  toLearnWordsNew)}
+        ${renderJsonWordsRow('Excluded &#9940;:',  excludeWordsManualNew)}
+        ${renderJsonWordsRow('Skipped &#129325;:',  skipWordsManual)}
+
+
         <div>
           <h1>All I know (for backup &#128519;):</h1>
           <div>
             <div><button onclick="copyAllKnown()">Copy all</button></div>
-            <div>${JSON.stringify(getAllKnownWords(), undefined, 2)}</div>
+            <div>${JSON.stringify([...knownWordsNew, ...knownWordsOld].sort(), undefined, 2)}</div>
           </div>
         </div>
-        <div>
-          <h1>These I knew from other movies &#128521;:</h1>
-          <div>${JSON.stringify(alreadyKnownAuto, undefined, 2)}</div>
-        </div>
-        <div>
-          <h1>Review to learn words from other movies &#129300;:</h1>
-          <div>${JSON.stringify(toLearnWordsOld, undefined, 2)}</div>
-        </div>
-        <div>
-          <h1>Skipped &#129325;:</h1>
-          <div>${JSON.stringify(skipWordsManualNew, undefined, 2)}</div>
-        </div>
-        <div>
-          <h1>Skipped from my list (auto)&#129322;:</h1>
-          <div>${JSON.stringify(skipWordsAutoFromMyList, undefined, 2)}</div>
-        </div>
-        <div>
-          <h1>Skipped auto &#128511; & &#128509;:</h1>
-          <div>${JSON.stringify(skipWordsAuto, undefined, 2)}</div>
-        </div>
-        <div>
-          <h1>Autocorrected words &#129488;:</h1>
-          <div>${JSON.stringify([...autocorrectedWords].sort(), undefined, 2)}</div>
-        </div>
+
+        ${renderJsonWordsRow('These I knew from other movies &#129312;:',  alreadyKnownAuto)}
+        ${renderJsonWordsRow('Review to learn words from other movies &#129300;:',  toLearnWordsOld)}
+        ${renderJsonWordsRow('Excluded from my list (auto)&#129322;:',  skipWordsAutoFromMyExcludeList)}
+        ${renderJsonWordsRow('Excluded auto (names, geo, etc.) &#128511; & &#128509;:',  skipWordsAutoFromCommonExcludeList)}
+        ${renderJsonWordsRow('Autocorrected words &#129488;:',  autocorrectedWords)}
       `;
     }
 
