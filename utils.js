@@ -18,6 +18,25 @@ function capitalize(word) {
   return word && isLowerCase(word[0]) ? word[0].toUpperCase() + word.slice(1, word.length) : word;
 }
 
+function trimStr(word, chars) {
+  let result = word;
+  for (const str of chars) {
+    if (word && word.startsWith(str)) {
+      result = word.slice(str.length);
+    }
+
+    if (word && word.endsWith(str)) {
+      result = word.slice(0, word.length - str.length);
+    }
+  }
+
+  if (word !== result) {
+    result = trimStr(result, chars);
+  }
+
+  return result;
+}
+
 function applyCorrection(word, candidate) {
   if (!window.wordsCommon.includes(word) &&
     !window.wordsWooordHunt.includes(word) && (

@@ -110,6 +110,8 @@
           .replaceAll('?', '')
           .replaceAll('!', '')
           .replaceAll('"', '')
+          .replaceAll('/', '')
+          .replaceAll('\\', '')
           .replaceAll('\'\'', '')
           .replaceAll(';', '')
           .replaceAll(':', '')
@@ -117,15 +119,13 @@
 
         const words = sanitizedSentence
           .split(' ')
-          .reduce((acc, item) => [...acc, ...item.split('\xa0')], [])
           .filter(word => word && !/^[$\d.,]+$/gm.test(word))
           .map(w => {
             const dotsCount = w.split('.').length - 1;
 
             return excludeWordsWithDot.includes(w) || dotsCount > 1 ? w : w.replaceAll('.', '');
           })
-          .map(w => w.startsWith('-') ? w.slice(1) : w)
-          .map(w => w.endsWith('-') ? w.slice(0, w.length - 1) : w);
+          .map(w => trimStr(w, ['-', '_', '(', ')']));
 
         for (const word of words) {
           let key = isUpperCase(word[0]) && (window.wordsCommon.includes(word) || window.wordsWooordHunt.includes(word))
@@ -192,7 +192,8 @@
           if (
             !wordsLibraryLowercased.includes(key) ||
             window.wordsExcludeNames.includes(capitalize(key)) ||
-            examples.length > 20
+            window.wordsExcludeGeo.includes(capitalize(key)) ||
+            examples.length > 15
           ) {
             wordsWithContext.set(correctedKey, examples);
             wordsWithContext.delete(key);
@@ -271,6 +272,8 @@
         .replaceAll(/\{[^}]*}/gi, '')
         .replaceAll('\n', ' ')
         .replaceAll('\r', ' ')
+        .replaceAll('\xa0', ' ') // unbreakable whitespace
+        .replaceAll('‐', '-')
         .replaceAll('  ', ' ').replaceAll('  ', ' ').replaceAll('  ', ' ');
 
       const sentences = parseSentences(subs);
@@ -315,18 +318,24 @@
 
     function showExamples(word) {
       setResultHtml(word, [...new Set(wordsWithContext.get(word) || [])].map(sentence => {
-        let highlighted = highlight(word, sentence);
+        try {
+          let highlighted = highlight(word, sentence);
 
-        if (word.endsWith('y')) {
-          highlighted = highlight(word.slice(0, word.length - 1) + 'ies', highlighted);
-          highlighted = highlight(word.slice(0, word.length - 1) + 'ied', highlighted);
+          if (word.endsWith('y')) {
+            highlighted = highlight(word.slice(0, word.length - 1) + 'ies', highlighted);
+            highlighted = highlight(word.slice(0, word.length - 1) + 'ied', highlighted);
+          }
+
+          if (word.endsWith('e')) {
+            highlighted = highlight(word.slice(0, word.length - 1) + 'ing', highlighted);
+          }
+
+          return `<p>${highlighted}</p>`;
+        } catch (error) {
+          console.error(error);
+
+          return `<p>${sentence}</p>`;
         }
-
-        if (word.endsWith('e')) {
-          highlighted = highlight(word.slice(0, word.length - 1) + 'ing', highlighted);
-        }
-
-        return `<p>${highlighted}</p>`;
       }).join(''));
     }
 

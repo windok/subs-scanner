@@ -149,6 +149,7 @@ window.wordsExcludeNames = [
   'Blake',
   'Blaze',
   'Bo',
+  'Bob',
   'Bobby',
   'Bode',
   'Boden',
