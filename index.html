@@ -35,7 +35,7 @@
     }
 
     function writeBackup(key, words) {
-      localStorage.setItem(key, JSON.stringify([...new Set(words.filter(Boolean))].sort()));
+      localStorage.setItem(key, JSON.stringify([...new Set(words)].sort()));
     }
 
     let wordsWithContext = new Map();
@@ -352,7 +352,7 @@
         knownWordsOld = knownWordsOld.filter(notEqualToWord);
         knownWordsNew = knownWordsNew.filter(notEqualToWord);
 
-        writeBackup('knownWords', [...knownWordsOld, ...knownWordsOld]);
+        writeBackup('knownWords', [...knownWordsOld, ...knownWordsNew]);
       }
 
       if (excludeWordsManualOld.includes(word) || excludeWordsManualNew.includes(word)) {
