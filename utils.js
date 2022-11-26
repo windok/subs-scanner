@@ -14,6 +14,10 @@ function escape(word) {
   return word.replaceAll('\'', '\\\'');
 }
 
+function capitalize(word) {
+  return word && isLowerCase(word[0]) ? word[0].toUpperCase() + word.slice(1, word.length) : word;
+}
+
 function applyCorrection(word, candidate) {
   if (!window.wordsCommon.includes(word) &&
     !window.wordsWooordHunt.includes(word) && (

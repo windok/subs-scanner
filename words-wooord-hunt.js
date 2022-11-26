@@ -10712,6 +10712,7 @@ window.wordsWooordHunt = [
   "calorie",
   "children",
   "compulsively",
+  "corollary",
   "fuck",
   "fucked",
   "fucking",

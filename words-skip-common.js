@@ -57,4 +57,5 @@ window.wordsExcludeCommon = [
   'VI',
   'VII',
   'VIII',
+  '♪',
 ];

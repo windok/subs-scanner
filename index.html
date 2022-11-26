@@ -14,6 +14,7 @@
 
   <script>
     const excludeWordsWithDot = ['Dr.'];
+    const wordsLibraryLowercased = [...window.wordsCommon, ...window.wordsWooordHunt].map(w => w.toLowerCase());
 
     function readBackup(key) {
       let backupWords = [];
@@ -67,14 +68,14 @@
           continue;
         }
 
-        if ('.!?'.includes(str[i]) && !excludeWordsWithDot.some(w => sentence.endsWith(w))) {
+        if ('.!?♪'.includes(str[i]) && !excludeWordsWithDot.some(w => sentence.endsWith(w))) {
           let afterSentencePart = '';
 
           for (let j = i + 1; j < str.length; j++) {
             const isLastChar = j === str.length - 1;
             afterSentencePart += str[j];
 
-            const sanitized = afterSentencePart.replaceAll('\n', '').replaceAll(/[.\s?!\-]/gi, '');
+            const sanitized = afterSentencePart.replaceAll('\n', '').replaceAll(/[.♪\s?!\-]/gi, '');
 
             if (isLastChar || (sanitized.length === 1 && isUpperCase(sanitized) && str[j + 1] !== '.')) {
               sentences.push(sentence.trim());
@@ -122,10 +123,14 @@
             const dotsCount = w.split('.').length - 1;
 
             return excludeWordsWithDot.includes(w) || dotsCount > 1 ? w : w.replaceAll('.', '');
-          });
+          })
+          .map(w => w.startsWith('-') ? w.slice(1) : w)
+          .map(w => w.endsWith('-') ? w.slice(0, w.length - 1) : w);
 
         for (const word of words) {
-          let key = word.toLowerCase();
+          let key = isUpperCase(word[0]) && (window.wordsCommon.includes(word) || window.wordsWooordHunt.includes(word))
+            ? word
+            : word.toLowerCase();
 
           if (key.endsWith('ies') || key.endsWith('ied')) {
             key = applyCorrection(key, key.slice(0, key.length - 3) + 'y');
@@ -182,9 +187,13 @@
             const from = example.toLowerCase().indexOf(key.toLowerCase());
             return example.slice(from, from + key.length);
           });
-          const correctedKey = correctedKeys.find(c => c !== key.toUpperCase()) || correctedKeys[0]
+          const correctedKey = correctedKeys.find(c => c !== key.toUpperCase()) || correctedKeys[0];
 
-          if (!window.wordsCommon.includes(key) && !window.wordsWooordHunt.includes(key)) {
+          if (
+            !wordsLibraryLowercased.includes(key) ||
+            window.wordsExcludeNames.includes(capitalize(key)) ||
+            examples.length > 20
+          ) {
             wordsWithContext.set(correctedKey, examples);
             wordsWithContext.delete(key);
           }
@@ -198,7 +207,7 @@
       [...wordsWithContext.keys()]
         .forEach(key => {
           if (
-              window.wordsExcludeCommon.includes(key) ||
+            window.wordsExcludeCommon.includes(key) ||
             (
               isUpperCase(key[0]) &&
               (window.wordsExcludeNames.includes(key) || window.wordsExcludeGeo.includes(key))
@@ -259,6 +268,7 @@
         .replaceAll(/^\d+$/gmi, '')
         .replaceAll(/^\d\d:\d\d:\d\d,\d\d\d --> \d\d:\d\d:\d\d,\d\d\d$/gmi, '')
         .replaceAll(/<[^>]*>/gi, '')
+        .replaceAll(/\{[^}]*}/gi, '')
         .replaceAll('\n', ' ')
         .replaceAll('\r', ' ')
         .replaceAll('  ', ' ').replaceAll('  ', ' ').replaceAll('  ', ' ');
@@ -293,18 +303,27 @@
 
     }
 
+    function highlight(word, sentence) {
+      const capitalized = capitalize(word);
+
+      return sentence
+        .replaceAll(word, `<b style="color: #bb0000">${word}</b>`)
+        .replaceAll(capitalized, `<b style="color: #bb0000">${capitalized}</b>`)
+        .replaceAll(word.toLowerCase(), `<b style="color: #bb0000">${word.toLowerCase()}</b>`)
+        .replaceAll(word.toUpperCase(), `<b style="color: #bb0000">${word.toUpperCase()}</b>`);
+    }
+
     function showExamples(word) {
       setResultHtml(word, [...new Set(wordsWithContext.get(word) || [])].map(sentence => {
+        let highlighted = highlight(word, sentence);
 
-        let highlighted = sentence
-          .replaceAll(word, `<b style="color: #bb0000">${word}</b>`)
-          .replaceAll(word.toLowerCase(), `<b style="color: #bb0000">${word.toLowerCase()}</b>`)
-          .replaceAll(word.toUpperCase(), `<b style="color: #bb0000">${word.toUpperCase()}</b>`);
+        if (word.endsWith('y')) {
+          highlighted = highlight(word.slice(0, word.length - 1) + 'ies', highlighted);
+          highlighted = highlight(word.slice(0, word.length - 1) + 'ied', highlighted);
+        }
 
-        if (isLowerCase(word[0])) {
-          const replacingWord = word[0].toUpperCase() + word.slice(1, word.length);
-
-          highlighted = highlighted.replaceAll(replacingWord, `<b style="color: #bb0000">${replacingWord}</b>`);
+        if (word.endsWith('e')) {
+          highlighted = highlight(word.slice(0, word.length - 1) + 'ing', highlighted);
         }
 
         return `<p>${highlighted}</p>`;
@@ -516,15 +535,15 @@
       const renderJsonWordsRow = (title, words) => `
         <div>
           <h1>${title}</h1>
-          <div>${JSON.stringify(words)}</div>
+          <div>${JSON.stringify(words, undefined, 2)}</div>
         </div>
-      `
+      `;
 
       document.getElementById('wordsProcessed').innerHTML = `
-        ${renderJsonWordsRow('New known words &#129321;',  knownWordsNew)}
-        ${renderJsonWordsRow('To learn &#129299;:',  toLearnWordsNew)}
-        ${renderJsonWordsRow('Excluded &#9940;:',  excludeWordsManualNew)}
-        ${renderJsonWordsRow('Skipped &#129325;:',  skipWordsManual)}
+        ${renderJsonWordsRow('New known words &#129321;', knownWordsNew)}
+        ${renderJsonWordsRow('To learn &#129299;:', toLearnWordsNew)}
+        ${renderJsonWordsRow('Excluded &#9940;:', excludeWordsManualNew)}
+        ${renderJsonWordsRow('Skipped &#129325;:', skipWordsManual)}
 
 
         <div>
@@ -535,11 +554,11 @@
           </div>
         </div>
 
-        ${renderJsonWordsRow('These I knew from other movies &#129312;:',  alreadyKnownAuto)}
-        ${renderJsonWordsRow('Review to learn words from other movies &#129300;:',  toLearnWordsOld)}
-        ${renderJsonWordsRow('Excluded from my list (auto)&#129322;:',  skipWordsAutoFromMyExcludeList)}
-        ${renderJsonWordsRow('Excluded auto (names, geo, etc.) &#128511; & &#128509;:',  skipWordsAutoFromCommonExcludeList)}
-        ${renderJsonWordsRow('Autocorrected words &#129488;:',  autocorrectedWords)}
+        ${renderJsonWordsRow('These I knew from other movies &#129312;:', alreadyKnownAuto)}
+        ${renderJsonWordsRow('Review to learn words from other movies &#129300;:', toLearnWordsOld)}
+        ${renderJsonWordsRow('Excluded from my list (auto)&#129322;:', skipWordsAutoFromMyExcludeList)}
+        ${renderJsonWordsRow('Excluded auto (names, geo, etc.) &#128511; & &#128509;:', skipWordsAutoFromCommonExcludeList)}
+        ${renderJsonWordsRow('Autocorrected words &#129488;:', autocorrectedWords)}
       `;
     }
 
