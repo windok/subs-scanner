@@ -46,7 +46,7 @@ window.wordsIrregularVerbs  = [
   ['forget', 'forgot', 'forgotten'],
   ['forgive', 'forgave', 'forgiven'],
   ['freeze', 'froze', 'frozen'],
-  ['get', 'got', 'got'],
+  ['get', 'got', 'got/gotten (American version)'],
   ['give', 'gave', 'given'],
   ['go', 'went', 'gone'],
   ['grind', 'ground', 'ground'],

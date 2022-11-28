@@ -35,7 +35,10 @@
     }
 
     function writeBackup(key, words) {
-      localStorage.setItem(key, JSON.stringify([...new Set(words)].sort()));
+      const content = JSON.stringify([...new Set(words)].sort());
+
+      localStorage.setItem(key, content);
+      // googleWriteFile(key, content);
     }
 
     let wordsWithContext = new Map();
@@ -316,31 +319,39 @@
         .replaceAll(word.toUpperCase(), `<b style="color: #bb0000">${word.toUpperCase()}</b>`);
     }
 
-    function showExamples(word) {
-      setResultHtml(word, [...new Set(wordsWithContext.get(word) || [])].map(sentence => {
-        try {
-          let highlighted = highlight(word, sentence);
+    function getExamplesHtml(word, limit) {
+      const style = ' style="margin: 3px"'
+      return [...new Set(wordsWithContext.get(word) || [])]
+        .slice(0, limit || 100)
+        .map(sentence => {
+          try {
+            let highlighted = highlight(word, sentence);
 
-          if (word.endsWith('y')) {
-            highlighted = highlight(word.slice(0, word.length - 1) + 'ies', highlighted);
-            highlighted = highlight(word.slice(0, word.length - 1) + 'ied', highlighted);
+            if (word.endsWith('y')) {
+              highlighted = highlight(word.slice(0, word.length - 1) + 'ies', highlighted);
+              highlighted = highlight(word.slice(0, word.length - 1) + 'ied', highlighted);
+            }
+
+            if (word.endsWith('e')) {
+              highlighted = highlight(word.slice(0, word.length - 1) + 'ing', highlighted);
+            }
+
+            return `<p ${style}>${highlighted}</p>`;
+          } catch (error) {
+            console.error(error);
+
+            return `<p ${style}>${sentence}</p>`;
           }
+        })
+        .join('');
+    }
 
-          if (word.endsWith('e')) {
-            highlighted = highlight(word.slice(0, word.length - 1) + 'ing', highlighted);
-          }
-
-          return `<p>${highlighted}</p>`;
-        } catch (error) {
-          console.error(error);
-
-          return `<p>${sentence}</p>`;
-        }
-      }).join(''));
+    function showExamples(word, limit) {
+      setResultHtml(word, getExamplesHtml(word, limit));
     }
 
     function closeResult(word) {
-      setResultHtml(word, '<br/>');
+      setResultHtml(word, getExamplesHtml(word, 2));
     }
 
     // lists: toLearnWords, knownWords, excludeWords
@@ -505,7 +516,8 @@
         ([word, examples]) => {
           const matchingIrregularVerbs = window.wordsIrregularVerbs
             .filter(
-              forms => forms.some(form => form.split('(').shift().trim() === word || form.split('/').includes(word)),
+              forms => forms.reduce((acc, form) => [...acc, ...form.split('/')], [])
+                .some(form => form.split('(').shift().trim() === word),
             )
             .map(forms => forms.join(' - '));
           const labelIrregularVerb = matchingIrregularVerbs.length
@@ -523,7 +535,7 @@
           return `
             <div id="wwword-${slugify(word)}">
               <h3>${examples.length}x   ${word} ${labelIrregularVerb} ${labelToLearnDuplicate} ${labelToReviewAgain}</h3>
-              <button onclick="showExamples('${escape(word)}') ">Examples</button>
+              <button onclick="showExamples('${escape(word)}') ">All Examples</button>
 
               <button onclick="showIframe('${escape(word)}', 'https://wooordhunt.ru/word/${escape(word)}', 250) ">Wooord Hunt</button>
               <button onclick="showIframe('${escape(word)}', 'https://thesaurus.com/browse/${escape(word)}', 150) ">Thesaurus</button>
@@ -534,7 +546,9 @@
               <button onclick="excludeWord('${escape(word)}') ">Exclude &#9940;</button>
               <button onclick="skipWord('${escape(word)}') ">Skip &#129325;</button>
 
-              <div id="wwword-result-${slugify(word)}"></div>
+              <div id="wwword-result-${slugify(word)}">
+                ${getExamplesHtml(word, 2)}
+              </div>
             </div>
             `;
         },
@@ -574,8 +588,23 @@
     window.onload = () => render();
   </script>
 </head>
+
 <body>
+<!--<script src="google.js"></script>-->
+<!--<script src="https://accounts.google.com/gsi/client" async defer></script>-->
+<!--<div id="g_id_onload"-->
+<!--  data-client_id="1069804549642-eqdaumbemf26uln5hhje8utldgri74no.apps.googleusercontent.com"-->
+<!--  data-callback="handleClientLoad">-->
+<!--</div>-->
+<!--<div class="g_id_signin" data-type="standard"></div>-->
 <div id="form" style="display: block"></div>
+
+<!--<div id="google">-->
+<!--  <span id="google-username"></span>-->
+<!--  <button id="google-sign-in">Sign In</button>-->
+<!--  <button id="google-sign-out">Sign Out</button>-->
+<!--</div>-->
+
 <div id="stats"></div>
 <div id="words"></div>
 <div id="wordsProcessed"></div>
