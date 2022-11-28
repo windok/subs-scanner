@@ -13,7 +13,7 @@
   <script src="utils.js"></script>
 
   <script>
-    const excludeWordsWithDot = ['Dr.'];
+    const excludeWordsWithDot = ['Dr.', 'Mr.', 'Ms.', 'Mrs.'];
     const wordsLibraryLowercased = [...window.wordsCommon, ...window.wordsWooordHunt].map(w => w.toLowerCase());
 
     function readBackup(key) {

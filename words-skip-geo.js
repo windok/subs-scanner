@@ -1459,4 +1459,9 @@ window.wordsExcludeGeo = [
   'Douai-Lens',
   'Omaha',
   'Xuancheng',
+
+  // my list
+  'England',
+  'Antarctica',
+  'Hollywood',
 ];
