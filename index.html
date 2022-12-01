@@ -5,6 +5,7 @@
 
   <script src="words-common.js"></script>
   <script src="words-irregular-verbs.js"></script>
+  <script src="words-adjectives-comparatives.js"></script>
   <script src="words-wooord-hunt.js"></script>
   <script src="words-skip-common.js"></script>
   <script src="words-skip-names.js"></script>
@@ -122,7 +123,7 @@
 
         const words = sanitizedSentence
           .split(' ')
-          .filter(word => word && !/^[$\d.,]+$/gm.test(word))
+          .filter(word => word && !/^[$\d.,]+(th)?$/gm.test(word))
           .map(w => {
             const dotsCount = w.split('.').length - 1;
 
@@ -136,9 +137,31 @@
             : word.toLowerCase();
 
           let autocorrectionApplied = false;
-          if (key.endsWith('ies') || key.endsWith('ied')) {
+          if (
+            key.endsWith('ies') ||
+            key.endsWith('ied')
+          ) {
+            const initial = key;
             key = applyCorrection(key, key.slice(0, key.length - 3) + 'y');
-            autocorrectionApplied = true;
+            key !== initial && (autocorrectionApplied = true);
+          }
+
+          if (!autocorrectionApplied && key.endsWith('ing') && key.length > 5 && key[key.length - 4] === key[key.length - 5]) {
+            const initial = key;
+            key = applyCorrection(key, key.slice(0, key.length - 4));
+            key !== initial && (autocorrectionApplied = true);
+          }
+
+          if (!autocorrectionApplied && key.endsWith('ing')) {
+            const initial = key;
+            key = applyCorrection(key, key.slice(0, key.length - 3) + 'e');
+            key !== initial && (autocorrectionApplied = true);
+          }
+
+          if (!autocorrectionApplied && key.endsWith('ed') && key.length > 4 && key[key.length - 3] === key[key.length - 4]) {
+            const initial = key;
+            key = applyCorrection(key, key.slice(0, key.length - 3));
+            key !== initial && (autocorrectionApplied = true);
           }
 
           if (
@@ -148,8 +171,9 @@
               key.endsWith('es')
             )
           ) {
+            const initial = key;
             key = applyCorrection(key, key.slice(0, key.length - 1));
-            autocorrectionApplied = true;
+            key !== initial && (autocorrectionApplied = true);
           }
 
           if (
@@ -159,13 +183,13 @@
               key.endsWith('\'d')
             )
           ) {
+            const initial = key;
             key = applyCorrection(key, key.slice(0, key.length - 2));
-            autocorrectionApplied = true;
+            key !== initial && (autocorrectionApplied = true);
           }
 
           if (
-            !autocorrectionApplied &&
-            (
+            !autocorrectionApplied && (
               key.endsWith('ing') ||
               key.endsWith('\'ve') ||
               key.endsWith('\'re') ||
@@ -173,23 +197,13 @@
               key.endsWith('n\'t')
             )
           ) {
+            const initial = key;
             key = applyCorrection(key, key.slice(0, key.length - 3));
-            autocorrectionApplied = true;
+            key !== initial && (autocorrectionApplied = true);
           }
 
-          if (!autocorrectionApplied && key.endsWith('ing')) {
-            key = applyCorrection(key, key.slice(0, key.length - 3) + 'e');
-            autocorrectionApplied = true;
-          }
-
-          if (!autocorrectionApplied && key.endsWith('ing') && key.length > 5 && key[key.length - 4] === key[key.length - 5]) {
-            key = applyCorrection(key, key.slice(0, key.length - 4));
-            autocorrectionApplied = true;
-          }
-
-          if (!autocorrectionApplied && key.endsWith('\'s')) {
+          if (key.endsWith('\'s')) {
             key = key.slice(0, key.length - 2);
-            autocorrectionApplied = true;
           }
 
           if (key !== word.toLowerCase()) {
@@ -553,6 +567,16 @@
             ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #002370">(${matchingIrregularVerbs.join('; ')})</span>`
             : '';
 
+          const matchingAdjectiveComparative = window.wordsAdjectiveComparatives
+            .filter(
+              forms => forms.reduce((acc, form, index) => index === 0 ? acc : [...acc, ...form.split('/')], [])
+                .some(form => form.split('(').shift().trim() === word),
+            )
+            .map(forms => forms.join(' - '));
+          const labelAdjectiveComparative = matchingAdjectiveComparative.length
+            ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #760083">(${matchingAdjectiveComparative.join('; ')})</span>`
+            : '';
+
           const labelToLearnDuplicate = toLearnWordsDuplicates.includes(word)
             ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #850000">(Already marked 'To learn &#129299;' previously)</span>`
             : '';
@@ -563,7 +587,7 @@
 
           return `
             <div id="wwword-${slugify(word)}">
-              <h3>${examples.length}x   ${word} ${labelIrregularVerb} ${labelToLearnDuplicate} ${labelToReviewAgain}</h3>
+              <h3>${examples.length}x   ${word} ${labelIrregularVerb} ${labelAdjectiveComparative} ${labelToLearnDuplicate} ${labelToReviewAgain}</h3>
               <button onclick="showExamples('${escape(word)}') ">All Examples</button>
 
               <button onclick="showIframe('${escape(word)}', 'https://wooordhunt.ru/word/${escape(word)}', 250) ">Wooord Hunt</button>
