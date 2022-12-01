@@ -1302,7 +1302,6 @@ window.wordsCommon = [
   'broad',
   'perspective',
   'slightly',
-  'growing',
   'function',
   'construction',
   'egg',

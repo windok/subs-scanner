@@ -12834,6 +12834,12 @@ window.wordsWooordHunt = [
   'yelp',
   'yummy',
 
+  'beep',
+  'exhale',
+  'whir',
+  'chime',
+  'bleat',
+
   'a-ha',
   'ahh',
   'aw',

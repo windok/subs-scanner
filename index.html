@@ -135,34 +135,61 @@
             ? word
             : word.toLowerCase();
 
+          let autocorrectionApplied = false;
           if (key.endsWith('ies') || key.endsWith('ied')) {
             key = applyCorrection(key, key.slice(0, key.length - 3) + 'y');
-          }
-
-          if (key.endsWith('s') || key.endsWith('ed') || key.endsWith('es')) {
-            key = applyCorrection(key, key.slice(0, key.length - 1));
-          }
-
-          if (key.endsWith('ed') || key.endsWith('es') || key.endsWith('\'d')) {
-            key = applyCorrection(key, key.slice(0, key.length - 2));
+            autocorrectionApplied = true;
           }
 
           if (
-            key.endsWith('ing') ||
-            key.endsWith('\'ve') ||
-            key.endsWith('\'re') ||
-            key.endsWith('\'ll') ||
-            key.endsWith('n\'t')
+            !autocorrectionApplied && (
+              key.endsWith('s') ||
+              key.endsWith('ed') ||
+              key.endsWith('es')
+            )
+          ) {
+            key = applyCorrection(key, key.slice(0, key.length - 1));
+            autocorrectionApplied = true;
+          }
+
+          if (
+            !autocorrectionApplied && (
+              key.endsWith('ed') ||
+              key.endsWith('es') ||
+              key.endsWith('\'d')
+            )
+          ) {
+            key = applyCorrection(key, key.slice(0, key.length - 2));
+            autocorrectionApplied = true;
+          }
+
+          if (
+            !autocorrectionApplied &&
+            (
+              key.endsWith('ing') ||
+              key.endsWith('\'ve') ||
+              key.endsWith('\'re') ||
+              key.endsWith('\'ll') ||
+              key.endsWith('n\'t')
+            )
           ) {
             key = applyCorrection(key, key.slice(0, key.length - 3));
+            autocorrectionApplied = true;
           }
 
-          if (key.endsWith('ing')) {
+          if (!autocorrectionApplied && key.endsWith('ing')) {
             key = applyCorrection(key, key.slice(0, key.length - 3) + 'e');
+            autocorrectionApplied = true;
           }
 
-          if (key.endsWith('\'s')) {
+          if (!autocorrectionApplied && key.endsWith('ing') && key.length > 5 && key[key.length - 4] === key[key.length - 5]) {
+            key = applyCorrection(key, key.slice(0, key.length - 4));
+            autocorrectionApplied = true;
+          }
+
+          if (!autocorrectionApplied && key.endsWith('\'s')) {
             key = key.slice(0, key.length - 2);
+            autocorrectionApplied = true;
           }
 
           if (key !== word.toLowerCase()) {
@@ -277,6 +304,8 @@
         .replaceAll('\r', ' ')
         .replaceAll('\xa0', ' ') // unbreakable whitespace
         .replaceAll('‐', '-')
+        .replaceAll('[', '(')
+        .replaceAll(']', ')')
         .replaceAll('  ', ' ').replaceAll('  ', ' ').replaceAll('  ', ' ');
 
       const sentences = parseSentences(subs);
@@ -320,7 +349,7 @@
     }
 
     function getExamplesHtml(word, limit) {
-      const style = ' style="margin: 3px"'
+      const style = ' style="margin: 3px"';
       return [...new Set(wordsWithContext.get(word) || [])]
         .slice(0, limit || 100)
         .map(sentence => {
