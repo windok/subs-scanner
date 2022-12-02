@@ -1,0 +1,1 @@
+Upload subtitle file here: https://windok.github.io/subs-scanner/

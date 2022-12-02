@@ -113,17 +113,19 @@
           .replaceAll(',', '')
           .replaceAll('?', '')
           .replaceAll('!', '')
+          .replaceAll('¿', '')
           .replaceAll('"', '')
+          .replaceAll('\'\'', '')
           .replaceAll('/', '')
           .replaceAll('\\', '')
-          .replaceAll('\'\'', '')
+          .replaceAll('♪♪', '♪')
           .replaceAll(';', '')
           .replaceAll(':', '')
           .replaceAll('- ', ' ');
 
         const words = sanitizedSentence
           .split(' ')
-          .filter(word => word && !/^[$\d.,]+(th)?$/gm.test(word))
+          .filter(word => word && !/^[$\d.,]+(th)?(nd)?(st)?%?$/gm.test(word))
           .map(w => {
             const dotsCount = w.split('.').length - 1;
 
@@ -237,7 +239,7 @@
             !wordsLibraryLowercased.includes(key) ||
             window.wordsExcludeNames.includes(capitalize(key)) ||
             window.wordsExcludeGeo.includes(capitalize(key)) ||
-            examples.length > 15
+            examples.length > 10
           ) {
             wordsWithContext.set(correctedKey, examples);
             wordsWithContext.delete(key);
@@ -482,28 +484,32 @@
 
     function renderForm() {
       document.getElementById('form').innerHTML = `
-        <input id="subtitles-file" type="file" />
+        <input id="subtitles-file" type="file" multiple />
       `;
 
       const input = document.getElementById('subtitles-file');
-      input.addEventListener('change', (...args) => {
-        const file = input.files[0];
-
-        if (!file) {
+      input.addEventListener('change', async (...args) => {
+        if (!input.files[0]) {
           console.log('--------------------> NO FILE is selected');
           return;
         }
 
-        let reader = new FileReader();
-        reader.readAsText(file);
+        const files = await Promise.all([...input.files].map(file => new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsText(file);
 
-        reader.onload = function () {
-          readSubs(reader.result);
-        };
+          reader.onload = function () {
+            resolve(reader.result);
+          };
 
-        reader.onerror = function () {
-          console.log('FILE READ error ---> ', reader.error);
-        };
+          reader.onerror = function () {
+            console.log('FILE READ error ---> ', reader.error);
+
+            reject(reader.error);
+          };
+        })));
+
+        readSubs(files.join(' '));
       }, false);
     }
 
@@ -643,6 +649,11 @@
 </head>
 
 <body>
+<div id="github" style="position: absolute; top: 5px; right: 5px; ">
+  <a href="https://github.com/windok/subs-scanner">
+    <img src="github.png" style="width: 30px; height: 30px">
+  </a>
+</div>
 <!--<script src="google.js"></script>-->
 <!--<script src="https://accounts.google.com/gsi/client" async defer></script>-->
 <!--<div id="g_id_onload"-->

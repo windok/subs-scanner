@@ -113,6 +113,7 @@ window.wordsAdjectiveComparatives = [
   ['messy', 'messier', 'messiest'],
   ['mild', 'milder', 'mildest'],
   ['moist', 'moister', 'moistest'],
+  ['murky', 'murkier', 'murkiest'],
   ['narrow', 'narrower', 'narrowest'],
   ['nasty', 'nastier', 'nastiest'],
   ['naughty', 'naughtier', 'naughtiest'],
