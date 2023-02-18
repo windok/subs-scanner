@@ -910,7 +910,6 @@ window.wordsExcludeGeo = [
   'Guayana',
   'Arequipa',
   'Dnipro',
-  'Nice',
   'Owerri',
   'Zamboanga',
   'Southampton',
@@ -1464,4 +1463,7 @@ window.wordsExcludeGeo = [
   'England',
   'Antarctica',
   'Hollywood',
+  'Riverdale',
+  'Hempstead',
+  'Newfoundland',
 ];

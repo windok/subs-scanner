@@ -6,16 +6,17 @@
   <script src="words-common.js"></script>
   <script src="words-irregular-verbs.js"></script>
   <script src="words-adjectives-comparatives.js"></script>
-  <script src="words-wooord-hunt.js"></script>
+  <script src="words-wooord-hunt-v6.js"></script>
   <script src="words-skip-common.js"></script>
-  <script src="words-skip-names.js"></script>
-  <script src="words-skip-geo.js"></script>
+  <script src="words-skip-names-v5.js"></script>
+  <script src="words-skip-geo-v2.js"></script>
 
   <script src="utils.js"></script>
 
   <script>
     const excludeWordsWithDot = ['Dr.', 'Mr.', 'Ms.', 'Mrs.'];
-    const wordsLibraryLowercased = [...window.wordsCommon, ...window.wordsWooordHunt].map(w => w.toLowerCase());
+    const wordsLibraryAll = [...window.wordsCommon, ...window.wordsWooordHunt];
+    const wordsLibraryLowercased = wordsLibraryAll.map(w => w.toLowerCase());
 
     function readBackup(key) {
       let backupWords = [];
@@ -112,6 +113,8 @@
           .replaceAll('..', '')
           .replaceAll(',', '')
           .replaceAll('?', '')
+          .replaceAll('<', '')
+          .replaceAll('>', '')
           .replaceAll('!', '')
           .replaceAll('¿', '')
           .replaceAll('"', '')
@@ -125,16 +128,17 @@
 
         const words = sanitizedSentence
           .split(' ')
-          .filter(word => word && !/^[$\d.,]+(th)?(nd)?(st)?%?$/gm.test(word))
+          .filter(Boolean)
           .map(w => {
             const dotsCount = w.split('.').length - 1;
 
             return excludeWordsWithDot.includes(w) || dotsCount > 1 ? w : w.replaceAll('.', '');
           })
-          .map(w => trimStr(w, ['-', '_', '(', ')']));
+          .map(w => trimStr(w, ['-', '_', '(', ')']))
+          .filter(Boolean);
 
         for (const word of words) {
-          let key = isUpperCase(word[0]) && (window.wordsCommon.includes(word) || window.wordsWooordHunt.includes(word))
+          let key = isUpperCase(word[0]) && wordsLibraryAll.includes(word)
             ? word
             : word.toLowerCase();
 
@@ -148,13 +152,20 @@
             key !== initial && (autocorrectionApplied = true);
           }
 
-          if (!autocorrectionApplied && key.endsWith('ing') && key.length > 5 && key[key.length - 4] === key[key.length - 5]) {
+          // e.g. sitting -> sit
+          if (
+            !autocorrectionApplied &&
+            (key.endsWith('ing') || key.endsWith('in\'')) &&
+            key.length > 5 &&
+            key[key.length - 4] === key[key.length - 5]
+          ) {
             const initial = key;
             key = applyCorrection(key, key.slice(0, key.length - 4));
             key !== initial && (autocorrectionApplied = true);
           }
 
-          if (!autocorrectionApplied && key.endsWith('ing')) {
+          // e.g. dancing -> dance
+          if (!autocorrectionApplied && (key.endsWith('ing') || key.endsWith('in\''))) {
             const initial = key;
             key = applyCorrection(key, key.slice(0, key.length - 3) + 'e');
             key !== initial && (autocorrectionApplied = true);
@@ -193,6 +204,7 @@
           if (
             !autocorrectionApplied && (
               key.endsWith('ing') ||
+              key.endsWith('in\'') ||
               key.endsWith('\'ve') ||
               key.endsWith('\'re') ||
               key.endsWith('\'ll') ||
@@ -202,6 +214,14 @@
             const initial = key;
             key = applyCorrection(key, key.slice(0, key.length - 3));
             key !== initial && (autocorrectionApplied = true);
+          }
+
+          if (key.startsWith('un')) {
+            key = applyCorrection(key, key.slice(2));
+          }
+
+          if (key.startsWith('non-')) {
+            key = applyCorrection(key, key.slice(4));
           }
 
           if (key.endsWith('\'s')) {
@@ -220,6 +240,7 @@
         }
       }
 
+      // check words that are not used in examples the way it was autocorrected
       [...wordsWithContext.entries()]
         .filter(([key, examples]) => !examples.some(e => e.includes(key)))
         .forEach(([key, examples]) => {
@@ -237,9 +258,10 @@
 
           if (
             !wordsLibraryLowercased.includes(key) ||
+            wordsLibraryAll.includes(correctedKey) ||
             window.wordsExcludeNames.includes(capitalize(key)) ||
             window.wordsExcludeGeo.includes(capitalize(key)) ||
-            examples.length > 10
+            (![...correctedKey].every(letter => isUpperCase(letter)) && examples.length > 10)
           ) {
             wordsWithContext.set(correctedKey, examples);
             wordsWithContext.delete(key);
@@ -258,13 +280,12 @@
             (
               isUpperCase(key[0]) &&
               (window.wordsExcludeNames.includes(key) || window.wordsExcludeGeo.includes(key))
-            )
+            ) ||
+            /^([a-z])?[$\d.,\-#]+(th|nd|st|rd)?%?$/igm.test(key)
           ) {
             skipWordsAutoFromCommonExcludeList.push(key);
             wordsWithContext.delete(key);
-          }
-
-          if (excludeWordsManualOld.includes(key)) {
+          } else if (excludeWordsManualOld.includes(key)) {
             skipWordsAutoFromMyExcludeList.push(key);
             wordsWithContext.delete(key);
           }
@@ -469,7 +490,11 @@
     }
 
     function copyAllKnown() {
-      navigator.clipboard.writeText(JSON.stringify([...knownWordsOld, ...knownWordsNew].sort()));
+      navigator.clipboard.writeText(JSON.stringify({
+        knownWords: readBackup('knownWords'),
+        toLearnWords: readBackup('toLearnWords'),
+        excludeWords: readBackup('excludeWords'),
+      }));
     }
 
     function render() {
@@ -650,6 +675,7 @@
 
 <body>
 <div id="github" style="position: absolute; top: 5px; right: 5px; ">
+  <img src="upload.png" style="width: 45px; height: 30px; cursor: pointer" onclick="copyAllKnown()">
   <a href="https://github.com/windok/subs-scanner">
     <img src="github.png" style="width: 30px; height: 30px">
   </a>
