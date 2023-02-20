@@ -6,9 +6,9 @@
   <script src="words-common.js"></script>
   <script src="words-irregular-verbs.js"></script>
   <script src="words-adjectives-comparatives.js"></script>
-  <script src="words-wooord-hunt-v6.js"></script>
-  <script src="words-skip-common.js"></script>
-  <script src="words-skip-names-v5.js"></script>
+  <script src="words-wooord-hunt-v8.js"></script>
+  <script src="words-skip-common-v3.js"></script>
+  <script src="words-skip-names-v7.js"></script>
   <script src="words-skip-geo-v2.js"></script>
 
   <script src="utils.js"></script>
@@ -117,6 +117,7 @@
           .replaceAll('>', '')
           .replaceAll('!', '')
           .replaceAll('¿', '')
+          .replaceAll('‐', '-')
           .replaceAll('"', '')
           .replaceAll('\'\'', '')
           .replaceAll('/', '')
@@ -276,7 +277,7 @@
       [...wordsWithContext.keys()]
         .forEach(key => {
           if (
-            window.wordsExcludeCommon.includes(key) ||
+            window.wordsExcludeCommonLowercased.includes(key.toLowerCase()) ||
             (
               isUpperCase(key[0]) &&
               (window.wordsExcludeNames.includes(key) || window.wordsExcludeGeo.includes(key))
@@ -288,13 +289,9 @@
           } else if (excludeWordsManualOld.includes(key)) {
             skipWordsAutoFromMyExcludeList.push(key);
             wordsWithContext.delete(key);
-          }
-
-          if (knownWordsOld.includes(key)) {
+          } else if (knownWordsOld.includes(key)) {
             alreadyKnownAuto.push(key);
-          }
-
-          if (toLearnWordsOld.includes(key)) {
+          } else if (toLearnWordsOld.includes(key)) {
             toLearnWordsDuplicates.push(key);
           }
         });
@@ -340,7 +337,7 @@
         .replaceAll('\n', ' ')
         .replaceAll('\r', ' ')
         .replaceAll('\xa0', ' ') // unbreakable whitespace
-        .replaceAll('‐', '-')
+        .replaceAll(/\u2010/g, '-')
         .replaceAll('[', '(')
         .replaceAll(']', ')')
         .replaceAll('  ', ' ').replaceAll('  ', ' ').replaceAll('  ', ' ');
@@ -584,16 +581,16 @@
 
       document.getElementById('stats').innerHTML = `
         <h1>All I know &#129312;: ${knownWordsOld.length}</h1>
-        ${renderJsonWordsRow('To learn words from other movies &#129300;:', toLearnWordsOld)}
-        ${renderJsonWordsRow('Exclude these words &#129322;:', excludeWordsManualOld)}
+        ${renderJsonWordsRow(`To learn words from other movies &#129300;: ${toLearnWordsOld.length}`, toLearnWordsOld)}
+        ${renderJsonWordsRow(`Exclude these words &#129322;: ${excludeWordsManualOld.length}`, excludeWordsManualOld)}
       `;
 
-      const sortedWords = toLearnWordsOld.map(w => ([ w, []])).sort(compareWords);
+      const sortedWords = toLearnWordsOld.map(w => ([w, []])).sort(compareWords);
       document.getElementById('words').innerHTML = renderWordsToReview(sortedWords, false);
 
       document.getElementById('wordsProcessed').innerHTML = `
         ${renderJsonWordsRow('All I know &#128519;:', knownWordsOld)}
-      `
+      `;
 
       const input = document.getElementById('subtitles-file');
       input.addEventListener('change', async (...args) => {
