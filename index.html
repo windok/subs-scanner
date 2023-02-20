@@ -281,7 +281,7 @@
               isUpperCase(key[0]) &&
               (window.wordsExcludeNames.includes(key) || window.wordsExcludeGeo.includes(key))
             ) ||
-            /^([a-z])?[$\d.,\-#]+(th|nd|st|rd)?%?$/igm.test(key)
+            /^([a-z])?[\d.,\-#%$]+(th|nd|st|rd)?$/igm.test(key)
           ) {
             skipWordsAutoFromCommonExcludeList.push(key);
             wordsWithContext.delete(key);
@@ -507,10 +507,93 @@
       }
     }
 
+    function renderJsonWordsRow(title, words) {
+      return `
+        <div>
+          <h1>${title}</h1>
+          <div>${JSON.stringify(words, undefined, 2)}</div>
+        </div>
+      `;
+    }
+
+    function renderWordsToReview(sortedWords, withProcessing) {
+      return sortedWords.map(
+        ([word, examples]) => {
+          const matchingIrregularVerbs = window.wordsIrregularVerbs
+            .filter(
+              forms => forms.reduce((acc, form) => [...acc, ...form.split('/')], [])
+                .some(form => form.split('(').shift().trim() === word),
+            )
+            .map(forms => forms.join(' - '));
+          const labelIrregularVerb = matchingIrregularVerbs.length
+            ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #002370">(${matchingIrregularVerbs.join('; ')})</span>`
+            : '';
+
+          const matchingAdjectiveComparative = window.wordsAdjectiveComparatives
+            .filter(
+              forms => forms.reduce((acc, form, index) => index === 0 ? acc : [...acc, ...form.split('/')], [])
+                .some(form => form.split('(').shift().trim() === word),
+            )
+            .map(forms => forms.join(' - '));
+          const labelAdjectiveComparative = matchingAdjectiveComparative.length
+            ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #760083">(${matchingAdjectiveComparative.join('; ')})</span>`
+            : '';
+
+          const labelToLearnDuplicate = toLearnWordsDuplicates.includes(word)
+            ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #850000">(Already marked 'To learn &#129299;' previously)</span>`
+            : '';
+
+          const labelToReviewAgain = toReviewAlreadyKnownDuplicates.includes(word)
+            ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #196700">(Review again word that you know &#129321;)</span>`
+            : '';
+
+          const examplesButton = examples.length ? `<button onclick="showExamples('${escape(word)}') ">All Examples</button>` : '';
+          const actions = withProcessing ? `
+            <button onclick="addToKnown('${escape(word)}') ">I know &#129321;</button>
+            <button onclick="addToLearn('${escape(word)}') ">To learn &#129299;</button>
+            <button onclick="excludeWord('${escape(word)}') ">Exclude &#9940;</button>
+            <button onclick="skipWord('${escape(word)}') ">Skip &#129325;</button>
+          ` : '';
+
+          return `
+            <div id="wwword-${slugify(word)}">
+              <h3>${examples.length ? examples.length + 'x' : ''}   ${word} ${labelIrregularVerb} ${labelAdjectiveComparative} ${labelToLearnDuplicate} ${labelToReviewAgain}</h3>
+
+              ${examplesButton}
+              <button onclick="showIframe('${escape(word)}', 'https://wooordhunt.ru/word/${escape(word)}', 250) ">Wooord Hunt</button>
+              <button onclick="showIframe('${escape(word)}', 'https://thesaurus.com/browse/${escape(word)}', 150) ">Thesaurus</button>
+              <button onclick="closeResult('${escape(word)}') ">Close</button>
+&nbsp;&nbsp;&nbsp;&nbsp;
+
+              ${actions}
+
+              <div id="wwword-result-${slugify(word)}">
+                ${getExamplesHtml(word, 2)}
+              </div>
+            </div>
+            `;
+        },
+      )
+        .join('');
+    }
+
     function renderForm() {
       document.getElementById('form').innerHTML = `
         <input id="subtitles-file" type="file" multiple />
       `;
+
+      document.getElementById('stats').innerHTML = `
+        <h1>All I know &#129312;: ${knownWordsOld.length}</h1>
+        ${renderJsonWordsRow('To learn words from other movies &#129300;:', toLearnWordsOld)}
+        ${renderJsonWordsRow('Exclude these words &#129322;:', excludeWordsManualOld)}
+      `;
+
+      const sortedWords = toLearnWordsOld.map(w => ([ w, []])).sort(compareWords);
+      document.getElementById('words').innerHTML = renderWordsToReview(sortedWords, false);
+
+      document.getElementById('wordsProcessed').innerHTML = `
+        ${renderJsonWordsRow('All I know &#128519;:', knownWordsOld)}
+      `
 
       const input = document.getElementById('subtitles-file');
       input.addEventListener('change', async (...args) => {
@@ -586,81 +669,14 @@
         </div>
       `;
 
-      document.getElementById('words').innerHTML = sortedWords.map(
-        ([word, examples]) => {
-          const matchingIrregularVerbs = window.wordsIrregularVerbs
-            .filter(
-              forms => forms.reduce((acc, form) => [...acc, ...form.split('/')], [])
-                .some(form => form.split('(').shift().trim() === word),
-            )
-            .map(forms => forms.join(' - '));
-          const labelIrregularVerb = matchingIrregularVerbs.length
-            ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #002370">(${matchingIrregularVerbs.join('; ')})</span>`
-            : '';
-
-          const matchingAdjectiveComparative = window.wordsAdjectiveComparatives
-            .filter(
-              forms => forms.reduce((acc, form, index) => index === 0 ? acc : [...acc, ...form.split('/')], [])
-                .some(form => form.split('(').shift().trim() === word),
-            )
-            .map(forms => forms.join(' - '));
-          const labelAdjectiveComparative = matchingAdjectiveComparative.length
-            ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #760083">(${matchingAdjectiveComparative.join('; ')})</span>`
-            : '';
-
-          const labelToLearnDuplicate = toLearnWordsDuplicates.includes(word)
-            ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #850000">(Already marked 'To learn &#129299;' previously)</span>`
-            : '';
-
-          const labelToReviewAgain = toReviewAlreadyKnownDuplicates.includes(word)
-            ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #196700">(Review again word that you know &#129321;)</span>`
-            : '';
-
-          return `
-            <div id="wwword-${slugify(word)}">
-              <h3>${examples.length}x   ${word} ${labelIrregularVerb} ${labelAdjectiveComparative} ${labelToLearnDuplicate} ${labelToReviewAgain}</h3>
-              <button onclick="showExamples('${escape(word)}') ">All Examples</button>
-
-              <button onclick="showIframe('${escape(word)}', 'https://wooordhunt.ru/word/${escape(word)}', 250) ">Wooord Hunt</button>
-              <button onclick="showIframe('${escape(word)}', 'https://thesaurus.com/browse/${escape(word)}', 150) ">Thesaurus</button>
-              <button onclick="closeResult('${escape(word)}') ">Close</button>
-&nbsp;&nbsp;&nbsp;&nbsp;
-              <button onclick="addToKnown('${escape(word)}') ">I know &#129321;</button>
-              <button onclick="addToLearn('${escape(word)}') ">To learn &#129299;</button>
-              <button onclick="excludeWord('${escape(word)}') ">Exclude &#9940;</button>
-              <button onclick="skipWord('${escape(word)}') ">Skip &#129325;</button>
-
-              <div id="wwword-result-${slugify(word)}">
-                ${getExamplesHtml(word, 2)}
-              </div>
-            </div>
-            `;
-        },
-      )
-        .join('');
-
-      const renderJsonWordsRow = (title, words) => `
-        <div>
-          <h1>${title}</h1>
-          <div>${JSON.stringify(words, undefined, 2)}</div>
-        </div>
-      `;
+      document.getElementById('words').innerHTML = renderWordsToReview(sortedWords, true);
 
       document.getElementById('wordsProcessed').innerHTML = `
         ${renderJsonWordsRow('New known words &#129321;', knownWordsNew)}
         ${renderJsonWordsRow('To learn &#129299;:', toLearnWordsNew)}
         ${renderJsonWordsRow('Excluded &#9940;:', excludeWordsManualNew)}
         ${renderJsonWordsRow('Skipped &#129325;:', skipWordsManual)}
-
-
-        <div>
-          <h1>All I know (for backup &#128519;):</h1>
-          <div>
-            <div><button onclick="copyAllKnown()">Copy all</button></div>
-            <div>${JSON.stringify([...knownWordsNew, ...knownWordsOld].sort(), undefined, 2)}</div>
-          </div>
-        </div>
-
+        ${renderJsonWordsRow('All I know (for backup &#128519;):', [...knownWordsNew, ...knownWordsOld])}
         ${renderJsonWordsRow('These I knew from other movies &#129312;:', alreadyKnownAuto)}
         ${renderJsonWordsRow('Review to learn words from other movies &#129300;:', toLearnWordsOld)}
         ${renderJsonWordsRow('Excluded from my list (auto)&#129322;:', skipWordsAutoFromMyExcludeList)}
