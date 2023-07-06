@@ -1466,4 +1466,6 @@ window.wordsExcludeGeo = [
   'Riverdale',
   'Hempstead',
   'Newfoundland',
+  'Alcatraz',
+  'Pittsburgh',
 ];

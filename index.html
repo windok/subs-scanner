@@ -6,10 +6,10 @@
   <script src="words-common.js"></script>
   <script src="words-irregular-verbs.js"></script>
   <script src="words-adjectives-comparatives.js"></script>
-  <script src="words-wooord-hunt-v8.js"></script>
-  <script src="words-skip-common-v3.js"></script>
-  <script src="words-skip-names-v7.js"></script>
-  <script src="words-skip-geo-v2.js"></script>
+  <script src="words-wooord-hunt-v9.js"></script>
+  <script src="words-skip-common-v4.js"></script>
+  <script src="words-skip-names-v8.js"></script>
+  <script src="words-skip-geo-v3.js"></script>
 
   <script src="utils.js"></script>
 
@@ -109,6 +109,9 @@
 
       for (const sentence of sentences) {
         const sanitizedSentence = sentence
+          .replaceAll(/\s+[^a-z]+\s+/g, ' ')
+          .replaceAll(/^[^a-z]+\s+/g, '')
+          .replaceAll(/\s+[^a-z]+$/g, '')
           .replaceAll('...', '')
           .replaceAll('..', '')
           .replaceAll(',', '')
@@ -150,6 +153,12 @@
           ) {
             const initial = key;
             key = applyCorrection(key, key.slice(0, key.length - 3) + 'y');
+            key !== initial && (autocorrectionApplied = true);
+          }
+
+          if (key.endsWith('ies')) {
+            const initial = key;
+            key = applyCorrection(key, key.slice(0, key.length - 3) + 'e');
             key !== initial && (autocorrectionApplied = true);
           }
 
@@ -282,7 +291,7 @@
               isUpperCase(key[0]) &&
               (window.wordsExcludeNames.includes(key) || window.wordsExcludeGeo.includes(key))
             ) ||
-            /^([a-z])?[\d.,\-#%$]+(th|nd|st|rd)?$/igm.test(key)
+            /^'?([a-z])?[\d.,\-#%$]+(s|th|nd|st|rd)?$/igm.test(key)
           ) {
             skipWordsAutoFromCommonExcludeList.push(key);
             wordsWithContext.delete(key);
@@ -352,12 +361,14 @@
       document.getElementById(`wwword-result-${slugify(word)}`).innerHTML = html;
     }
 
-    function showIframe(word, link, scrollTop) {
+    function showIframe(word, link, options = {}) {
+      const { scrollTop = 0, height = 300 } = options;
+
       setResultHtml(
         word,
         `
         <div id="wwword-iframe-${slugify(word)}" style="border-style: inset; border-color: grey; overflow: scroll; height: 500px; width: 100% ">
-          <iframe width="100%" height="300%" src="${link}" />
+          <iframe width="100%" height="${height}%" src="${link}" />
         </div>
         `,
       );
@@ -557,8 +568,9 @@
               <h3>${examples.length ? examples.length + 'x' : ''}   ${word} ${labelIrregularVerb} ${labelAdjectiveComparative} ${labelToLearnDuplicate} ${labelToReviewAgain}</h3>
 
               ${examplesButton}
-              <button onclick="showIframe('${escape(word)}', 'https://wooordhunt.ru/word/${escape(word)}', 250) ">Wooord Hunt</button>
-              <button onclick="showIframe('${escape(word)}', 'https://thesaurus.com/browse/${escape(word)}', 150) ">Thesaurus</button>
+              <button onclick="showIframe('${escape(word)}', 'https://wooordhunt.ru/word/${escape(word)}', { scrollTop: 250 }) ">Wooord Hunt</button>
+              <button onclick="showIframe('${escape(word)}', 'https://app.duocards.com/main/card/${escape(word)}', { height: 100 }) ">DuoCards</button>
+              <button onclick="showIframe('${escape(word)}', 'https://thesaurus.com/browse/${escape(word)}', { scrollTop: 150 }) ">Thesaurus</button>
               <button onclick="closeResult('${escape(word)}') ">Close</button>
 &nbsp;&nbsp;&nbsp;&nbsp;
 
