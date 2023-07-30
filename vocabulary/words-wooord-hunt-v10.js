@@ -12978,4 +12978,8 @@ window.wordsWooordHunt = [
   'bugger',
   'ninja',
   'lullaby',
+  'kitty',
+  'mermaid',
+  'greeting',
+  'insincere',
 ];

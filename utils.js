@@ -7,11 +7,11 @@ function isLowerCase(str) {
 }
 
 function slugify(word) {
-  return word.replaceAll('\'', '-');
+  return word.replaceAll("'", '-');
 }
 
 function escape(word) {
-  return word.replaceAll('\'', '\\\'');
+  return word.replaceAll("'", "\\'");
 }
 
 function capitalize(word) {
@@ -38,11 +38,11 @@ function trimStr(word, chars) {
 }
 
 function applyCorrection(word, candidate) {
-  if (!window.wordsCommon.includes(word) &&
-    !window.wordsWooordHunt.includes(word) && (
-      window.wordsCommon.includes(candidate) ||
-      window.wordsWooordHunt.includes(candidate)
-    )) {
+  if (
+    !window.wordsCommon.includes(word) &&
+    !window.wordsWooordHunt.includes(word) &&
+    (window.wordsCommon.includes(candidate) || window.wordsWooordHunt.includes(candidate))
+  ) {
     return candidate;
   } else {
     return word;
@@ -71,4 +71,13 @@ function compareWords([a, aExamples], [b, bExamples]) {
   }
 
   return aCommonIndex - bCommonIndex;
+}
+
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+
+  return array;
 }

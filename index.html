@@ -1,297 +1,360 @@
 <html>
-<head>
-  <title>&#128049; Kitten's movies word parser and vocabulary</title>
-  <link rel="shortcut icon" type="image/x-icon" href="favicon.ico">
+  <head>
+    <title>&#128049; Kitten's movies word parser and vocabulary</title>
+    <link rel="shortcut icon" type="image/x-icon" href="favicon.ico" />
 
-  <script src="words-common.js"></script>
-  <script src="words-irregular-verbs.js"></script>
-  <script src="words-adjectives-comparatives.js"></script>
-  <script src="words-wooord-hunt-v9.js"></script>
-  <script src="words-skip-common-v4.js"></script>
-  <script src="words-skip-names-v8.js"></script>
-  <script src="words-skip-geo-v3.js"></script>
+    <script src="vocabulary/words-common.js"></script>
+    <script src="vocabulary/words-irregular-verbs.js"></script>
+    <script src="vocabulary/words-adjectives-comparatives.js"></script>
+    <script src="vocabulary/words-wooord-hunt-v10.js"></script>
+    <script src="vocabulary/words-skip-common-v4.js"></script>
+    <script src="vocabulary/words-skip-names-v9.js"></script>
+    <script src="vocabulary/words-skip-geo-v4.js"></script>
 
-  <script src="utils.js"></script>
+    <script src="utils.js"></script>
+    <script src="sync.js"></script>
+    <script src="google.js"></script>
 
-  <script>
-    const excludeWordsWithDot = ['Dr.', 'Mr.', 'Ms.', 'Mrs.'];
-    const wordsLibraryAll = [...window.wordsCommon, ...window.wordsWooordHunt];
-    const wordsLibraryLowercased = wordsLibraryAll.map(w => w.toLowerCase());
+    <script>
+      const excludeWordsWithDot = ['Dr.', 'Mr.', 'Ms.', 'Mrs.'];
+      const wordsLibraryAll = [...window.wordsCommon, ...window.wordsWooordHunt];
+      const wordsLibraryLowercased = wordsLibraryAll.map(w => w.toLowerCase());
 
-    function readBackup(key) {
-      let backupWords = [];
+      const localStorageData = readFromLocalStorage();
 
-      if (localStorage.getItem(key)) {
-        try {
-          const parsedBackup = JSON.parse(localStorage.getItem(key));
+      let version = localStorageData.version;
+      let nextVersion = version + 1;
 
-          if (Array.isArray(parsedBackup) && parsedBackup.every(w => typeof w === 'string')) {
-            backupWords = parsedBackup;
-          }
-        } catch (error) {
-          console.log('--------------------> FAILED TO PARSE local library from storage', error);
-        }
-      }
+      let isLocalSyncRequired = version === 0;
 
-      return backupWords;
-    }
+      let wordsWithContext = new Map();
 
-    function writeBackup(key, words) {
-      const content = JSON.stringify([...new Set(words)].sort());
+      let knownWordsOld = localStorageData.knownWords;
+      let knownWordsNew = [];
 
-      localStorage.setItem(key, content);
-      // googleWriteFile(key, content);
-    }
+      let excludeWordsManualOld = localStorageData.excludeWords;
+      let excludeWordsManualNew = [];
 
-    let wordsWithContext = new Map();
+      let toLearnWordsOld = localStorageData.toLearnWords;
+      let toLearnWordsNew = [];
 
-    let knownWordsOld = readBackup('knownWords');
-    let knownWordsNew = [];
+      const skipWordsManual = [];
+      const skipWordsAutoFromMyExcludeList = [];
+      const skipWordsAutoFromCommonExcludeList = [];
 
-    let excludeWordsManualOld = readBackup('excludeWords');
-    let excludeWordsManualNew = [];
+      let reviewWordsQty = 20;
+      let alreadyKnownAuto = [];
+      let toReviewAlreadyKnownDuplicates = [];
+      let toLearnWordsDuplicates = [];
+      let autocorrectedWords = [];
 
-    let toLearnWordsOld = readBackup('toLearnWords');
-    let toLearnWordsNew = [];
-
-    const skipWordsManual = [];
-    const skipWordsAutoFromMyExcludeList = [];
-    const skipWordsAutoFromCommonExcludeList = [];
-
-    let alreadyKnownAuto = [];
-    let toReviewAlreadyKnownDuplicates = [];
-    let toLearnWordsDuplicates = [];
-    let autocorrectedWords = [];
-
-    function parseSentences(str) {
-      const sentences = [];
-      let sentence = '';
-      for (let i = 0; i < str.length; i++) {
-        sentence += str[i];
-
-        if (str[i + 1] === '.') {
-          continue;
+      function writeLocalBackupIfSyncRequired() {
+        if (!isLocalSyncRequired) {
+          return;
         }
 
-        if ('.!?♪'.includes(str[i]) && !excludeWordsWithDot.some(w => sentence.endsWith(w))) {
-          let afterSentencePart = '';
-
-          for (let j = i + 1; j < str.length; j++) {
-            const isLastChar = j === str.length - 1;
-            afterSentencePart += str[j];
-
-            const sanitized = afterSentencePart.replaceAll('\n', '').replaceAll(/[.♪\s?!\-]/gi, '');
-
-            if (isLastChar || (sanitized.length === 1 && isUpperCase(sanitized) && str[j + 1] !== '.')) {
-              sentences.push(sentence.trim());
-              sentence = '';
-
-              break;
-            }
-
-            if (sanitized.length) {
-              // console.log({ sentence, afterSentencePart });
-              sentence += afterSentencePart;
-              i = j;
-
-              break;
-            }
-          }
-        }
-      }
-
-      return sentences;
-    }
-
-    function parseWordsWithExamples(sentences) {
-      const wordsWithContext = new Map();
-      const autocorrectedWordsUnique = new Set();
-
-      for (const sentence of sentences) {
-        const sanitizedSentence = sentence
-          .replaceAll(/\s+[^a-z]+\s+/g, ' ')
-          .replaceAll(/^[^a-z]+\s+/g, '')
-          .replaceAll(/\s+[^a-z]+$/g, '')
-          .replaceAll('...', '')
-          .replaceAll('..', '')
-          .replaceAll(',', '')
-          .replaceAll('?', '')
-          .replaceAll('<', '')
-          .replaceAll('>', '')
-          .replaceAll('!', '')
-          .replaceAll('¿', '')
-          .replaceAll('‐', '-')
-          .replaceAll('"', '')
-          .replaceAll('\'\'', '')
-          .replaceAll('/', '')
-          .replaceAll('\\', '')
-          .replaceAll('♪♪', '♪')
-          .replaceAll(';', '')
-          .replaceAll(':', '')
-          .replaceAll('- ', ' ');
-
-        const words = sanitizedSentence
-          .split(' ')
-          .filter(Boolean)
-          .map(w => {
-            const dotsCount = w.split('.').length - 1;
-
-            return excludeWordsWithDot.includes(w) || dotsCount > 1 ? w : w.replaceAll('.', '');
-          })
-          .map(w => trimStr(w, ['-', '_', '(', ')']))
-          .filter(Boolean);
-
-        for (const word of words) {
-          let key = isUpperCase(word[0]) && wordsLibraryAll.includes(word)
-            ? word
-            : word.toLowerCase();
-
-          let autocorrectionApplied = false;
-          if (
-            key.endsWith('ies') ||
-            key.endsWith('ied')
-          ) {
-            const initial = key;
-            key = applyCorrection(key, key.slice(0, key.length - 3) + 'y');
-            key !== initial && (autocorrectionApplied = true);
-          }
-
-          if (key.endsWith('ies')) {
-            const initial = key;
-            key = applyCorrection(key, key.slice(0, key.length - 3) + 'e');
-            key !== initial && (autocorrectionApplied = true);
-          }
-
-          // e.g. sitting -> sit
-          if (
-            !autocorrectionApplied &&
-            (key.endsWith('ing') || key.endsWith('in\'')) &&
-            key.length > 5 &&
-            key[key.length - 4] === key[key.length - 5]
-          ) {
-            const initial = key;
-            key = applyCorrection(key, key.slice(0, key.length - 4));
-            key !== initial && (autocorrectionApplied = true);
-          }
-
-          // e.g. dancing -> dance
-          if (!autocorrectionApplied && (key.endsWith('ing') || key.endsWith('in\''))) {
-            const initial = key;
-            key = applyCorrection(key, key.slice(0, key.length - 3) + 'e');
-            key !== initial && (autocorrectionApplied = true);
-          }
-
-          if (!autocorrectionApplied && key.endsWith('ed') && key.length > 4 && key[key.length - 3] === key[key.length - 4]) {
-            const initial = key;
-            key = applyCorrection(key, key.slice(0, key.length - 3));
-            key !== initial && (autocorrectionApplied = true);
-          }
-
-          if (
-            !autocorrectionApplied && (
-              key.endsWith('s') ||
-              key.endsWith('ed') ||
-              key.endsWith('es')
-            )
-          ) {
-            const initial = key;
-            key = applyCorrection(key, key.slice(0, key.length - 1));
-            key !== initial && (autocorrectionApplied = true);
-          }
-
-          if (
-            !autocorrectionApplied && (
-              key.endsWith('ed') ||
-              key.endsWith('es') ||
-              key.endsWith('\'d')
-            )
-          ) {
-            const initial = key;
-            key = applyCorrection(key, key.slice(0, key.length - 2));
-            key !== initial && (autocorrectionApplied = true);
-          }
-
-          if (
-            !autocorrectionApplied && (
-              key.endsWith('ing') ||
-              key.endsWith('in\'') ||
-              key.endsWith('\'ve') ||
-              key.endsWith('\'re') ||
-              key.endsWith('\'ll') ||
-              key.endsWith('n\'t')
-            )
-          ) {
-            const initial = key;
-            key = applyCorrection(key, key.slice(0, key.length - 3));
-            key !== initial && (autocorrectionApplied = true);
-          }
-
-          if (key.startsWith('un')) {
-            key = applyCorrection(key, key.slice(2));
-          }
-
-          if (key.startsWith('non-')) {
-            key = applyCorrection(key, key.slice(4));
-          }
-
-          if (key.endsWith('\'s')) {
-            key = key.slice(0, key.length - 2);
-          }
-
-          if (key !== word.toLowerCase()) {
-            autocorrectedWordsUnique.add(word.toLowerCase());
-          }
-
-          if (!wordsWithContext.has(key)) {
-            wordsWithContext.set(key, []);
-          }
-
-          wordsWithContext.get(key).push(sentence);
-        }
-      }
-
-      // check words that are not used in examples the way it was autocorrected
-      [...wordsWithContext.entries()]
-        .filter(([key, examples]) => !examples.some(e => e.includes(key)))
-        .forEach(([key, examples]) => {
-          // because of applied autocorrection some variants might have changed
-          const matchingExamples = examples.filter(e => e.toLowerCase().includes(key.toLowerCase()));
-          if (!matchingExamples.length) {
-            return;
-          }
-
-          const correctedKeys = matchingExamples.map(example => {
-            const from = example.toLowerCase().indexOf(key.toLowerCase());
-            return example.slice(from, from + key.length);
-          });
-          const correctedKey = correctedKeys.find(c => c !== key.toUpperCase()) || correctedKeys[0];
-
-          if (
-            !wordsLibraryLowercased.includes(key) ||
-            wordsLibraryAll.includes(correctedKey) ||
-            window.wordsExcludeNames.includes(capitalize(key)) ||
-            window.wordsExcludeGeo.includes(capitalize(key)) ||
-            (![...correctedKey].every(letter => isUpperCase(letter)) && examples.length > 10)
-          ) {
-            wordsWithContext.set(correctedKey, examples);
-            wordsWithContext.delete(key);
-          }
+        writeToLocalStorage({
+          version: nextVersion,
+          knownWords: [...knownWordsNew, ...knownWordsOld],
+          excludeWords: [...excludeWordsManualNew, ...excludeWordsManualOld],
+          toLearnWords: [...toLearnWordsNew, ...toLearnWordsOld],
         });
 
-      if (wordsWithContext.has('i')) {
-        wordsWithContext.set('I', wordsWithContext.get('i'));
-        wordsWithContext.delete('i');
+        isLocalSyncRequired = false;
       }
 
-      [...wordsWithContext.keys()]
-        .forEach(key => {
+      let isCloudBackupFetched = false;
+      async function cloudSync(withAlert = false) {
+        console.log('--------------------> cloudSync');
+        writeLocalBackupIfSyncRequired();
+
+        if (!isCloudBackupFetched) {
+          const cloudBackup = await getGDriveBackup();
+          version = Math.max(version, cloudBackup.version);
+          nextVersion = version + 1;
+
+          const initialQty =
+            toLearnWordsOld.length + knownWordsOld.length + excludeWordsManualOld.length;
+
+          toLearnWordsOld = [...new Set([...toLearnWordsOld, ...cloudBackup.toLearnWords])];
+          toLearnWordsNew = toLearnWordsNew.filter(w => !toLearnWordsOld.includes(w));
+
+          knownWordsOld = [
+            ...new Set(
+              [...knownWordsOld, ...cloudBackup.knownWords].filter(
+                w => !toLearnWordsOld.includes(w)
+              )
+            ),
+          ];
+          knownWordsNew = knownWordsNew.filter(w => !knownWordsOld.includes(w));
+
+          excludeWordsManualOld = [
+            ...new Set(
+              [...excludeWordsManualOld, ...cloudBackup.excludeWords].filter(
+                w => !toLearnWordsOld.includes(w) && !knownWordsOld.includes(w)
+              )
+            ),
+          ];
+          excludeWordsManualNew = excludeWordsManualNew.filter(
+            w => !excludeWordsManualOld.includes(w)
+          );
+
+          const finalQty =
+            toLearnWordsOld.length + knownWordsOld.length + excludeWordsManualOld.length;
+
+          if (initialQty !== finalQty) {
+            isLocalSyncRequired = true;
+            writeLocalBackupIfSyncRequired();
+          }
+
+          isCloudBackupFetched = true;
+          render();
+        }
+
+        const backup = readFromLocalStorage();
+        await uploadGDriveBackup(JSON.stringify(backup));
+
+        withAlert &&
+          alert(
+            `Synced to cloud! \n
+            ${backup.knownWords.length}x known,\n
+            ${backup.toLearnWords.length}x to learn,\n
+            ${backup.excludeWords.length}x excluded`
+          );
+      }
+
+      setInterval(writeLocalBackupIfSyncRequired, 60 * 1000); // every minute
+      setInterval(cloudSync, 5 * 60 * 1000); // every 5 minutes
+
+      function parseSentences(str) {
+        const sentences = [];
+        let sentence = '';
+        for (let i = 0; i < str.length; i++) {
+          sentence += str[i];
+
+          if (str[i + 1] === '.') {
+            continue;
+          }
+
+          if ('.!?♪'.includes(str[i]) && !excludeWordsWithDot.some(w => sentence.endsWith(w))) {
+            let afterSentencePart = '';
+
+            for (let j = i + 1; j < str.length; j++) {
+              const isLastChar = j === str.length - 1;
+              afterSentencePart += str[j];
+
+              const sanitized = afterSentencePart
+                .replaceAll('\n', '')
+                .replaceAll(/[.♪\s?!\-]/gi, '');
+
+              if (
+                isLastChar ||
+                (sanitized.length === 1 && isUpperCase(sanitized) && str[j + 1] !== '.')
+              ) {
+                sentences.push(sentence.trim());
+                sentence = '';
+
+                break;
+              }
+
+              if (sanitized.length) {
+                // console.log({ sentence, afterSentencePart });
+                sentence += afterSentencePart;
+                i = j;
+
+                break;
+              }
+            }
+          }
+        }
+
+        return sentences;
+      }
+
+      function parseWordsWithExamples(sentences) {
+        const wordsWithContext = new Map();
+        const autocorrectedWordsUnique = new Set();
+
+        for (const sentence of sentences) {
+          const sanitizedSentence = sentence
+            .replaceAll(/\s+[^a-z]+\s+/g, ' ')
+            .replaceAll(/^[^a-z]+\s+/g, '')
+            .replaceAll(/\s+[^a-z]+$/g, '')
+            .replaceAll('...', '')
+            .replaceAll('..', '')
+            .replaceAll(',', '')
+            .replaceAll('?', '')
+            .replaceAll('<', '')
+            .replaceAll('>', '')
+            .replaceAll('!', '')
+            .replaceAll('¿', '')
+            .replaceAll('‐', '-')
+            .replaceAll('"', '')
+            .replaceAll("''", '')
+            .replaceAll('/', '')
+            .replaceAll('\\', '')
+            .replaceAll('♪♪', '♪')
+            .replaceAll(';', '')
+            .replaceAll(':', '')
+            .replaceAll('- ', ' ');
+
+          const words = sanitizedSentence
+            .split(' ')
+            .filter(Boolean)
+            .map(w => {
+              const dotsCount = w.split('.').length - 1;
+
+              return excludeWordsWithDot.includes(w) || dotsCount > 1 ? w : w.replaceAll('.', '');
+            })
+            .map(w => trimStr(w, ['-', '_', '(', ')']))
+            .filter(Boolean);
+
+          for (const word of words) {
+            let key =
+              isUpperCase(word[0]) && wordsLibraryAll.includes(word) ? word : word.toLowerCase();
+
+            let autocorrectionApplied = false;
+            if (key.endsWith('ies') || key.endsWith('ied')) {
+              const initial = key;
+              key = applyCorrection(key, key.slice(0, key.length - 3) + 'y');
+              key !== initial && (autocorrectionApplied = true);
+            }
+
+            if (key.endsWith('ies')) {
+              const initial = key;
+              key = applyCorrection(key, key.slice(0, key.length - 3) + 'e');
+              key !== initial && (autocorrectionApplied = true);
+            }
+
+            // e.g. sitting -> sit
+            if (
+              !autocorrectionApplied &&
+              (key.endsWith('ing') || key.endsWith("in'")) &&
+              key.length > 5 &&
+              key[key.length - 4] === key[key.length - 5]
+            ) {
+              const initial = key;
+              key = applyCorrection(key, key.slice(0, key.length - 4));
+              key !== initial && (autocorrectionApplied = true);
+            }
+
+            // e.g. dancing -> dance
+            if (!autocorrectionApplied && (key.endsWith('ing') || key.endsWith("in'"))) {
+              const initial = key;
+              key = applyCorrection(key, key.slice(0, key.length - 3) + 'e');
+              key !== initial && (autocorrectionApplied = true);
+            }
+
+            if (
+              !autocorrectionApplied &&
+              key.endsWith('ed') &&
+              key.length > 4 &&
+              key[key.length - 3] === key[key.length - 4]
+            ) {
+              const initial = key;
+              key = applyCorrection(key, key.slice(0, key.length - 3));
+              key !== initial && (autocorrectionApplied = true);
+            }
+
+            if (
+              !autocorrectionApplied &&
+              (key.endsWith('s') || key.endsWith('ed') || key.endsWith('es'))
+            ) {
+              const initial = key;
+              key = applyCorrection(key, key.slice(0, key.length - 1));
+              key !== initial && (autocorrectionApplied = true);
+            }
+
+            if (
+              !autocorrectionApplied &&
+              (key.endsWith('ed') || key.endsWith('es') || key.endsWith("'d"))
+            ) {
+              const initial = key;
+              key = applyCorrection(key, key.slice(0, key.length - 2));
+              key !== initial && (autocorrectionApplied = true);
+            }
+
+            if (
+              !autocorrectionApplied &&
+              (key.endsWith('ing') ||
+                key.endsWith("in'") ||
+                key.endsWith("'ve") ||
+                key.endsWith("'re") ||
+                key.endsWith("'ll") ||
+                key.endsWith("n't"))
+            ) {
+              const initial = key;
+              key = applyCorrection(key, key.slice(0, key.length - 3));
+              key !== initial && (autocorrectionApplied = true);
+            }
+
+            if (key.startsWith('un')) {
+              key = applyCorrection(key, key.slice(2));
+            }
+
+            if (key.startsWith('non-')) {
+              key = applyCorrection(key, key.slice(4));
+            }
+
+            if (key.endsWith("'s")) {
+              key = key.slice(0, key.length - 2);
+            }
+
+            if (key !== word.toLowerCase()) {
+              autocorrectedWordsUnique.add(word.toLowerCase());
+            }
+
+            if (!wordsWithContext.has(key)) {
+              wordsWithContext.set(key, []);
+            }
+
+            wordsWithContext.get(key).push(sentence);
+          }
+        }
+
+        // check words that are not used in examples the way it was autocorrected
+        [...wordsWithContext.entries()]
+          .filter(([key, examples]) => !examples.some(e => e.includes(key)))
+          .forEach(([key, examples]) => {
+            // because of applied autocorrection some variants might have changed
+            const matchingExamples = examples.filter(e =>
+              e.toLowerCase().includes(key.toLowerCase())
+            );
+            if (!matchingExamples.length) {
+              return;
+            }
+
+            const correctedKeys = matchingExamples.map(example => {
+              const from = example.toLowerCase().indexOf(key.toLowerCase());
+              return example.slice(from, from + key.length);
+            });
+            const correctedKey =
+              correctedKeys.find(c => c !== key.toUpperCase()) || correctedKeys[0];
+
+            // switch case back in case word is used not in lowercase for all examples
+            if (
+              !wordsLibraryLowercased.includes(key) ||
+              wordsLibraryAll.includes(correctedKey) ||
+              window.wordsExcludeNames.includes(capitalize(key)) ||
+              window.wordsExcludeGeo.includes(capitalize(key)) ||
+              (![...correctedKey].every(letter => isUpperCase(letter)) && examples.length > 15)
+            ) {
+              wordsWithContext.set(correctedKey, examples);
+              wordsWithContext.delete(key);
+            }
+          });
+
+        if (wordsWithContext.has('i')) {
+          wordsWithContext.set('I', wordsWithContext.get('i'));
+          wordsWithContext.delete('i');
+        }
+
+        [...wordsWithContext.keys()].forEach(key => {
           if (
             window.wordsExcludeCommonLowercased.includes(key.toLowerCase()) ||
-            (
-              isUpperCase(key[0]) &&
-              (window.wordsExcludeNames.includes(key) || window.wordsExcludeGeo.includes(key))
-            ) ||
-            /^'?([a-z])?[\d.,\-#%$]+(s|th|nd|st|rd)?$/igm.test(key)
+            (isUpperCase(key[0]) &&
+              (window.wordsExcludeNames.includes(key) || window.wordsExcludeGeo.includes(key))) ||
+            /^'?([a-z])?[\d.,\-#%$]+(s|th|nd|st|rd)?$/gim.test(key)
           ) {
             skipWordsAutoFromCommonExcludeList.push(key);
             wordsWithContext.delete(key);
@@ -305,423 +368,525 @@
           }
         });
 
-      toReviewAlreadyKnownDuplicates = alreadyKnownAuto
-        .filter(key => wordsWithContext.get(key).length <= 20)
-        .sort(() => Math.random() - 0.6) // simple shuffle
-        .sort(() => Math.random() - 0.5)
-        .sort(() => Math.random() - 0.4)
-        .slice(0, 20);
+        toReviewAlreadyKnownDuplicates = shuffleArray(
+          // only words with less than 15 examples
+          alreadyKnownAuto.filter(key => wordsWithContext.get(key).length <= 15)
+        ).slice(0, reviewWordsQty);
 
-      [...wordsWithContext.keys()].forEach(key => {
-        if (alreadyKnownAuto.includes(key) && !toReviewAlreadyKnownDuplicates.includes(key)) {
-          wordsWithContext.delete(key);
+        [...wordsWithContext.keys()].forEach(key => {
+          if (alreadyKnownAuto.includes(key) && !toReviewAlreadyKnownDuplicates.includes(key)) {
+            wordsWithContext.delete(key);
+          }
+        });
+
+        autocorrectedWords = [...autocorrectedWordsUnique].sort();
+
+        return wordsWithContext;
+      }
+
+      window.readSubs = (subsString, knownWordsList) => {
+        if (knownWordsList) {
+          try {
+            const knownWordsParsed = Array.isArray(knownWordsList)
+              ? knownWordsList
+              : JSON.parse(knownWordsList);
+
+            if (
+              Array.isArray(knownWordsParsed) &&
+              knownWordsParsed.every(w => typeof w === 'string')
+            ) {
+              knownWordsOld = knownWordsParsed;
+            } else {
+              console.error('INCORRECT FORMAT OF known words list');
+            }
+          } catch (error) {
+            console.error('INCORRECT FORMAT OF known words list', error);
+          }
+        }
+
+        const subs = subsString
+          .replaceAll(/^\d+$/gim, '')
+          .replaceAll(/^\d\d:\d\d:\d\d,\d\d\d --> \d\d:\d\d:\d\d,\d\d\d$/gim, '')
+          .replaceAll(/<[^>]*>/gi, '')
+          .replaceAll(/\{[^}]*}/gi, '')
+          .replaceAll('\n', ' ')
+          .replaceAll('\r', ' ')
+          .replaceAll('\xa0', ' ') // unbreakable whitespace
+          .replaceAll(/\u2010/g, '-')
+          .replaceAll('[', '(')
+          .replaceAll(']', ')')
+          .replaceAll('  ', ' ')
+          .replaceAll('  ', ' ')
+          .replaceAll('  ', ' ');
+
+        const sentences = parseSentences(subs);
+        wordsWithContext = parseWordsWithExamples(sentences);
+
+        render();
+      };
+
+      function setResultHtml(word, html) {
+        document.getElementById(`wwword-result-${slugify(word)}`).innerHTML = html;
+      }
+
+      function showIframe(word, link, options = {}) {
+        const { scrollTop = 0, height = 300 } = options;
+
+        setResultHtml(
+          word,
+          `
+              <div id="wwword-iframe-${slugify(
+                word
+              )}" style="border-style: inset; border-color: grey; overflow: scroll; height: 500px; width: 100% ">
+                <iframe width="100%" height="${height}%" src="${link}" />
+              </div>
+              `
+        );
+
+        if (scrollTop) {
+          const iframeContainer = document.getElementById(`wwword-iframe-${slugify(word)}`);
+          iframeContainer.querySelector('iframe').onload = async () => {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            iframeContainer.scrollTo(0, scrollTop);
+          };
+        }
+      }
+
+      function highlight(word, sentence) {
+        let result = sentence;
+
+        [...new Set([word, capitalize(word), word.toLowerCase(), word.toUpperCase()])].forEach(
+          variant => {
+            result = result.replaceAll(variant, `<b style="color: #bb0000">${variant}</b>`);
+          }
+        );
+
+        return result;
+      }
+
+      function getExamplesHtml(word, limit) {
+        const style = ' style="margin: 3px"';
+        return [...new Set(wordsWithContext.get(word) || [])]
+          .slice(0, limit || 100)
+          .map(sentence => {
+            try {
+              let highlighted = highlight(word, sentence);
+
+              if (word.endsWith('y')) {
+                highlighted = highlight(word.slice(0, word.length - 1) + 'ies', highlighted);
+                highlighted = highlight(word.slice(0, word.length - 1) + 'ied', highlighted);
+              }
+
+              if (word.endsWith('e')) {
+                highlighted = highlight(word.slice(0, word.length - 1) + 'ing', highlighted);
+              }
+
+              return `<p ${style}>${highlighted}</p>`;
+            } catch (error) {
+              console.error(error);
+
+              return `<p ${style}>${sentence}</p>`;
+            }
+          })
+          .join('');
+      }
+
+      function showExamples(word, limit) {
+        setResultHtml(word, getExamplesHtml(word, limit));
+      }
+
+      function closeResult(word) {
+        setResultHtml(word, getExamplesHtml(word, 2));
+      }
+
+      // lists: toLearnWords, knownWords, excludeWords
+      function sanitizeLists(word) {
+        const notEqualToWord = w => w !== word;
+
+        if (toLearnWordsOld.includes(word) || toLearnWordsNew.includes(word)) {
+          toLearnWordsDuplicates = toLearnWordsDuplicates.filter(notEqualToWord);
+          toLearnWordsOld = toLearnWordsOld.filter(notEqualToWord);
+          toLearnWordsNew = toLearnWordsNew.filter(notEqualToWord);
+        }
+
+        if (knownWordsOld.includes(word) || knownWordsNew.includes(word)) {
+          toReviewAlreadyKnownDuplicates = toReviewAlreadyKnownDuplicates.filter(notEqualToWord);
+          alreadyKnownAuto = alreadyKnownAuto.filter(notEqualToWord);
+          knownWordsOld = knownWordsOld.filter(notEqualToWord);
+          knownWordsNew = knownWordsNew.filter(notEqualToWord);
+        }
+
+        if (excludeWordsManualOld.includes(word) || excludeWordsManualNew.includes(word)) {
+          excludeWordsManualOld = excludeWordsManualOld.filter(notEqualToWord);
+          excludeWordsManualNew = excludeWordsManualNew.filter(notEqualToWord);
+        }
+      }
+
+      function addToKnown(word) {
+        sanitizeLists(word);
+
+        knownWordsNew.push(word);
+        wordsWithContext.delete(word);
+
+        isLocalSyncRequired = true;
+
+        render();
+      }
+
+      function addToLearn(word) {
+        sanitizeLists(word);
+
+        toLearnWordsNew.push(word);
+        wordsWithContext.delete(word);
+
+        isLocalSyncRequired = true;
+
+        render();
+      }
+
+      function excludeWord(word) {
+        sanitizeLists(word);
+
+        excludeWordsManualNew.push(word);
+        wordsWithContext.delete(word);
+
+        isLocalSyncRequired = true;
+
+        render();
+      }
+
+      function skipWord(word) {
+        skipWordsManual.push(word);
+        wordsWithContext.delete(word);
+
+        render();
+      }
+
+      function copyAllKnown() {
+        writeLocalBackupIfSyncRequired();
+
+        const backup = readFromLocalStorage();
+
+        navigator.clipboard.writeText(JSON.stringify(backup)).then(() => {
+          alert(
+            `Copied to clipboard! \n
+            ${backup.knownWords.length}x known,\n
+            ${backup.toLearnWords.length}x to learn,\n
+            ${backup.excludeWords.length}x excluded`
+          );
+        });
+      }
+
+      function render() {
+        if (!wordsWithContext.size) {
+          document.getElementById('form').style.setProperty('display', 'block');
+          renderForm();
+        } else {
+          document.getElementById('form').style.setProperty('display', 'none');
+          renderRows();
+        }
+      }
+
+      function renderJsonWordsRow(title, words) {
+        return `
+              <div>
+                <h1>${title}</h1>
+                <div>${JSON.stringify(words, undefined, 2)}</div>
+              </div>
+            `;
+      }
+
+      function renderWordsToReview(sortedWords, withProcessing) {
+        return sortedWords
+          .map(([word, examples]) => {
+            const matchingIrregularVerbs = window.wordsIrregularVerbs
+              .filter(forms =>
+                forms
+                  .reduce((acc, form) => [...acc, ...form.split('/')], [])
+                  .some(form => form.split('(').shift().trim() === word)
+              )
+              .map(forms => forms.join(' - '));
+            const labelIrregularVerb = matchingIrregularVerbs.length
+              ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #002370">(${matchingIrregularVerbs.join(
+                  '; '
+                )})</span>`
+              : '';
+
+            const matchingAdjectiveComparative = window.wordsAdjectiveComparatives
+              .filter(forms =>
+                forms
+                  .reduce(
+                    (acc, form, index) => (index === 0 ? acc : [...acc, ...form.split('/')]),
+                    []
+                  )
+                  .some(form => form.split('(').shift().trim() === word)
+              )
+              .map(forms => forms.join(' - '));
+            const labelAdjectiveComparative = matchingAdjectiveComparative.length
+              ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #760083">(${matchingAdjectiveComparative.join(
+                  '; '
+                )})</span>`
+              : '';
+
+            const labelToLearnDuplicate = toLearnWordsDuplicates.includes(word)
+              ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #850000">(Already marked 'To learn &#129299;' previously)</span>`
+              : '';
+
+            const labelToReviewAgain = toReviewAlreadyKnownDuplicates.includes(word)
+              ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #196700">(Review again word that you know &#129321;)</span>`
+              : '';
+
+            const examplesButton = examples.length
+              ? `<button onclick="showExamples('${escape(word)}') ">All Examples</button>`
+              : '';
+            const actions = withProcessing
+              ? `
+                  <button onclick="addToKnown('${escape(word)}') ">I know &#129321;</button>
+                  <button onclick="addToLearn('${escape(word)}') ">To learn &#129299;</button>
+                  <button onclick="excludeWord('${escape(word)}') ">Exclude &#9940;</button>
+                  <button onclick="skipWord('${escape(word)}') ">Skip &#129325;</button>
+                `
+              : '';
+
+            return `
+                  <div id="wwword-${slugify(word)}">
+                    <h3>${
+                      examples.length ? examples.length + 'x' : ''
+                    }   ${word} ${labelIrregularVerb} ${labelAdjectiveComparative} ${labelToLearnDuplicate} ${labelToReviewAgain}</h3>
+
+                    ${examplesButton}
+                    <button onclick="showIframe('${escape(
+                      word
+                    )}', 'https://wooordhunt.ru/word/${escape(
+              word
+            )}', { scrollTop: 250 }) ">Wooord Hunt</button>
+                    <button onclick="showIframe('${escape(
+                      word
+                    )}', 'https://app.duocards.com/main/card/${escape(
+              word
+            )}', { height: 100 }) ">DuoCards</button>
+                    <button onclick="showIframe('${escape(
+                      word
+                    )}', 'https://thesaurus.com/browse/${escape(
+              word
+            )}', { scrollTop: 150 }) ">Thesaurus</button>
+                    <button onclick="closeResult('${escape(word)}') ">Close</button>
+      &nbsp;&nbsp;&nbsp;&nbsp;
+
+                    ${actions}
+
+                    <div id="wwword-result-${slugify(word)}">
+                      ${getExamplesHtml(word, 2)}
+                    </div>
+                  </div>
+                  `;
+          })
+          .join('');
+      }
+
+      function onChangeReviewQty() {
+        reviewWordsQty = +document.getElementById('review-qty').value;
+      }
+
+      function renderForm() {
+        document.getElementById('form').innerHTML = `
+              <button style="display: inline-block; width:120px; height:30px; margin: 0 20px" onclick="document.getElementById('subtitles-file').click()">Select .srt file(s)</button>
+              <input id="subtitles-file" type="file" multiple style="display:none" />
+              <label>Known words to repeat: </label>
+              <input id="review-qty" type="number" value="${reviewWordsQty}" style="width: 50px" onchange="onChangeReviewQty()"/>
+            `;
+
+        document.getElementById('stats').innerHTML = `
+              <h1>All I know &#129312;: ${knownWordsOld.length}</h1>
+              ${renderJsonWordsRow(
+                `To learn words from other movies &#129300;: ${toLearnWordsOld.length}`,
+                toLearnWordsOld
+              )}
+              ${renderJsonWordsRow(
+                `Exclude these words &#129322;: ${excludeWordsManualOld.length}`,
+                excludeWordsManualOld
+              )}
+            `;
+
+        const sortedWords = toLearnWordsOld.map(w => [w, []]).sort(compareWords);
+        document.getElementById('words').innerHTML = renderWordsToReview(sortedWords, false);
+
+        document.getElementById('wordsProcessed').innerHTML = `
+              ${renderJsonWordsRow('All I know &#128519;:', knownWordsOld)}
+            `;
+
+        const input = document.getElementById('subtitles-file');
+        input.addEventListener(
+          'change',
+          async (...args) => {
+            if (!input.files[0]) {
+              console.log('--------------------> NO FILE is selected');
+              return;
+            }
+
+            const files = await Promise.all(
+              [...input.files].map(
+                file =>
+                  new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.readAsText(file);
+
+                    reader.onload = function () {
+                      resolve(reader.result);
+                    };
+
+                    reader.onerror = function () {
+                      console.log('FILE READ error ---> ', reader.error);
+
+                      reject(reader.error);
+                    };
+                  })
+              )
+            );
+
+            readSubs(files.join(' '));
+          },
+          false
+        );
+      }
+
+      function renderRows() {
+        const sortedWords = [...wordsWithContext.entries()].sort(compareWords);
+
+        const allMovieWordsCount =
+          sortedWords.length +
+          skipWordsAutoFromCommonExcludeList.length +
+          skipWordsAutoFromMyExcludeList.length +
+          alreadyKnownAuto.length +
+          toLearnWordsNew.length +
+          knownWordsNew.length +
+          excludeWordsManualNew.length +
+          skipWordsManual.length;
+        const toReview =
+          sortedWords.length +
+          toReviewAlreadyKnownDuplicates.length +
+          toLearnWordsDuplicates.length;
+
+        document.getElementById('stats').innerHTML = `
+              <div>
+                <h2>Overall Progress so far &#128520;</h2>
+                <div style="display: flex;">
+                  <span style="flex: 1; text-align: left; ">Known &#129312;: ${knownWordsOld.length}</span>
+                  <span style="flex: 1; text-align: left; ">To learn &#129299;: ${toLearnWordsOld.length}</span>
+                  <span style="flex: 1; text-align: left; ">Excluded &#9940;: ${excludeWordsManualOld.length}</span>
+                  <span style="flex: 1; text-align: left; ">&nbsp;</span>
+                  <span style="flex: 1; text-align: left; ">&nbsp;</span>
+                </div>
+
+                <h2>Words in this movie &#128579;: ${allMovieWordsCount}</h2>
+                <div style="display: flex;">
+                  <span style="flex: 1; text-align: left; ">Already known &#129312;: ${alreadyKnownAuto.length}</span>
+                  <span style="flex: 1; text-align: left; ">Already set to learn &#129300;: ${toLearnWordsDuplicates.length}</span>
+                  <span style="flex: 1; text-align: left; ">Excluded (my list)&#129322;: ${skipWordsAutoFromMyExcludeList.length}</span>
+                  <span style="flex: 1; text-align: left; ">Excluded (auto)&#128511;&&#128509;: ${skipWordsAutoFromCommonExcludeList.length}</span>
+                  <span style="flex: 1; text-align: left; ">&nbsp;</span>
+                </div>
+                <div style="display: flex;">
+                  <span style="flex: 1; text-align: left; ">To review &#128517;: ${toReview}</span>
+                  <span style="flex: 1; text-align: left; ">Known &#129321;: ${knownWordsNew.length}</span>
+                  <span style="flex: 1; text-align: left; ">To learn &#129299;: ${toLearnWordsNew.length}</span>
+                  <span style="flex: 1; text-align: left; ">Exluded &#9940;: ${excludeWordsManualNew.length}</span>
+                  <span style="flex: 1; text-align: left; ">Skipped &#129325;: ${skipWordsManual.length}</span>
+                </div>
+              </div>
+            `;
+
+        document.getElementById('words').innerHTML = renderWordsToReview(sortedWords, true);
+
+        document.getElementById('wordsProcessed').innerHTML = `
+              ${renderJsonWordsRow('New known words &#129321;', knownWordsNew)}
+              ${renderJsonWordsRow('To learn &#129299;:', toLearnWordsNew)}
+              ${renderJsonWordsRow('Excluded &#9940;:', excludeWordsManualNew)}
+              ${renderJsonWordsRow('Skipped &#129325;:', skipWordsManual)}
+              ${renderJsonWordsRow('All I know (for backup &#128519;):', [
+                ...knownWordsNew,
+                ...knownWordsOld,
+              ])}
+              ${renderJsonWordsRow('These I knew from other movies &#129312;:', alreadyKnownAuto)}
+              ${renderJsonWordsRow(
+                'Review to learn words from other movies &#129300;:',
+                toLearnWordsOld
+              )}
+              ${renderJsonWordsRow(
+                'Excluded from my list (auto)&#129322;:',
+                skipWordsAutoFromMyExcludeList
+              )}
+              ${renderJsonWordsRow(
+                'Excluded auto (names, geo, etc.) &#128511; & &#128509;:',
+                skipWordsAutoFromCommonExcludeList
+              )}
+              ${renderJsonWordsRow('Autocorrected words &#129488;:', autocorrectedWords)}
+            `;
+      }
+
+      window.onload = () => render();
+      window.addEventListener('beforeunload', function (e) {
+        writeLocalBackupIfSyncRequired();
+
+        if (isCloudBackupFetched) {
+          cloudSync();
         }
       });
+    </script>
+  </head>
 
-      autocorrectedWords = [...autocorrectedWordsUnique].sort();
+  <body>
+    <div style="display: flex; justify-content: space-between; align-items: center">
+      <div>
+        <div id="form" style="display: block"></div>
+      </div>
 
-      return wordsWithContext;
-    }
+      <div style="display: flex; align-items: center; gap: 10px">
+        <!--Add buttons to initiate auth sequence and sign out-->
+        <button
+          id="google-authorize-button"
+          style="display: none; width: 120px; height: 30px"
+          onclick="handleAuthClick()"
+        >
+          Google Sign-in
+        </button>
+        <button
+          id="google-signout-button"
+          style="display: none; width: 120px; height: 30px"
+          onclick="handleSignoutClick()"
+        >
+          Google Sign-out
+        </button>
 
-    window.readSubs = (subsString, knownWordsList) => {
-      if (knownWordsList) {
-        try {
-          const knownWordsParsed = Array.isArray(knownWordsList) ? knownWordsList : JSON.parse(knownWordsList);
-
-          if (Array.isArray(knownWordsParsed) && knownWordsParsed.every(w => typeof w === 'string')) {
-            knownWordsOld = knownWordsParsed;
-          } else {
-            console.error('INCORRECT FORMAT OF known words list');
-          }
-        } catch (error) {
-          console.error('INCORRECT FORMAT OF known words list', error);
-        }
-      }
-
-      const subs = subsString
-        .replaceAll(/^\d+$/gmi, '')
-        .replaceAll(/^\d\d:\d\d:\d\d,\d\d\d --> \d\d:\d\d:\d\d,\d\d\d$/gmi, '')
-        .replaceAll(/<[^>]*>/gi, '')
-        .replaceAll(/\{[^}]*}/gi, '')
-        .replaceAll('\n', ' ')
-        .replaceAll('\r', ' ')
-        .replaceAll('\xa0', ' ') // unbreakable whitespace
-        .replaceAll(/\u2010/g, '-')
-        .replaceAll('[', '(')
-        .replaceAll(']', ')')
-        .replaceAll('  ', ' ').replaceAll('  ', ' ').replaceAll('  ', ' ');
-
-      const sentences = parseSentences(subs);
-      wordsWithContext = parseWordsWithExamples(sentences);
-
-      render();
-    };
-
-    function setResultHtml(word, html) {
-      document.getElementById(`wwword-result-${slugify(word)}`).innerHTML = html;
-    }
-
-    function showIframe(word, link, options = {}) {
-      const { scrollTop = 0, height = 300 } = options;
-
-      setResultHtml(
-        word,
-        `
-        <div id="wwword-iframe-${slugify(word)}" style="border-style: inset; border-color: grey; overflow: scroll; height: 500px; width: 100% ">
-          <iframe width="100%" height="${height}%" src="${link}" />
-        </div>
-        `,
-      );
-
-      if (scrollTop) {
-        const iframeContainer = document.getElementById(`wwword-iframe-${slugify(word)}`);
-        iframeContainer.querySelector('iframe').onload = async () => {
-          await new Promise(resolve => setTimeout(resolve, 100));
-          iframeContainer.scrollTo(0, scrollTop);
-        };
-      }
-
-    }
-
-    function highlight(word, sentence) {
-      const capitalized = capitalize(word);
-
-      return sentence
-        .replaceAll(word, `<b style="color: #bb0000">${word}</b>`)
-        .replaceAll(capitalized, `<b style="color: #bb0000">${capitalized}</b>`)
-        .replaceAll(word.toLowerCase(), `<b style="color: #bb0000">${word.toLowerCase()}</b>`)
-        .replaceAll(word.toUpperCase(), `<b style="color: #bb0000">${word.toUpperCase()}</b>`);
-    }
-
-    function getExamplesHtml(word, limit) {
-      const style = ' style="margin: 3px"';
-      return [...new Set(wordsWithContext.get(word) || [])]
-        .slice(0, limit || 100)
-        .map(sentence => {
-          try {
-            let highlighted = highlight(word, sentence);
-
-            if (word.endsWith('y')) {
-              highlighted = highlight(word.slice(0, word.length - 1) + 'ies', highlighted);
-              highlighted = highlight(word.slice(0, word.length - 1) + 'ied', highlighted);
-            }
-
-            if (word.endsWith('e')) {
-              highlighted = highlight(word.slice(0, word.length - 1) + 'ing', highlighted);
-            }
-
-            return `<p ${style}>${highlighted}</p>`;
-          } catch (error) {
-            console.error(error);
-
-            return `<p ${style}>${sentence}</p>`;
-          }
-        })
-        .join('');
-    }
-
-    function showExamples(word, limit) {
-      setResultHtml(word, getExamplesHtml(word, limit));
-    }
-
-    function closeResult(word) {
-      setResultHtml(word, getExamplesHtml(word, 2));
-    }
-
-    // lists: toLearnWords, knownWords, excludeWords
-    function sanitizeLists(word) {
-      const notEqualToWord = w => w !== word;
-
-      if (toLearnWordsOld.includes(word) || toLearnWordsNew.includes(word)) {
-        toLearnWordsDuplicates = toLearnWordsDuplicates.filter(notEqualToWord);
-        toLearnWordsOld = toLearnWordsOld.filter(notEqualToWord);
-        toLearnWordsNew = toLearnWordsNew.filter(notEqualToWord);
-
-        writeBackup('toLearnWords', [...toLearnWordsOld, ...toLearnWordsNew]);
-      }
-
-      if (knownWordsOld.includes(word) || knownWordsNew.includes(word)) {
-        toReviewAlreadyKnownDuplicates = toReviewAlreadyKnownDuplicates.filter(notEqualToWord);
-        alreadyKnownAuto = alreadyKnownAuto.filter(notEqualToWord);
-        knownWordsOld = knownWordsOld.filter(notEqualToWord);
-        knownWordsNew = knownWordsNew.filter(notEqualToWord);
-
-        writeBackup('knownWords', [...knownWordsOld, ...knownWordsNew]);
-      }
-
-      if (excludeWordsManualOld.includes(word) || excludeWordsManualNew.includes(word)) {
-        excludeWordsManualOld = excludeWordsManualOld.filter(notEqualToWord);
-        excludeWordsManualNew = excludeWordsManualNew.filter(notEqualToWord);
-
-        writeBackup('excludeWords', [...excludeWordsManualOld, ...excludeWordsManualNew]);
-      }
-    }
-
-    function addToKnown(word) {
-      sanitizeLists(word);
-
-      knownWordsNew.push(word);
-      wordsWithContext.delete(word);
-
-      writeBackup('knownWords', [...knownWordsOld, ...knownWordsNew]);
-
-      render();
-    }
-
-    function addToLearn(word) {
-      sanitizeLists(word);
-
-      toLearnWordsNew.push(word);
-      wordsWithContext.delete(word);
-
-      writeBackup('toLearnWords', [...toLearnWordsOld, ...toLearnWordsNew]);
-
-      render();
-    }
-
-    function excludeWord(word) {
-      sanitizeLists(word);
-
-      excludeWordsManualNew.push(word);
-      wordsWithContext.delete(word);
-
-      writeBackup('excludeWords', [...excludeWordsManualOld, ...excludeWordsManualNew]);
-
-      render();
-    }
-
-    function skipWord(word) {
-      skipWordsManual.push(word);
-      wordsWithContext.delete(word);
-
-      render();
-    }
-
-    function copyAllKnown() {
-      navigator.clipboard.writeText(JSON.stringify({
-        knownWords: readBackup('knownWords'),
-        toLearnWords: readBackup('toLearnWords'),
-        excludeWords: readBackup('excludeWords'),
-      }));
-    }
-
-    function render() {
-      if (!wordsWithContext.size) {
-        document.getElementById('form').style.setProperty('display', 'block');
-        renderForm();
-      } else {
-        document.getElementById('form').style.setProperty('display', 'none');
-        renderRows();
-      }
-    }
-
-    function renderJsonWordsRow(title, words) {
-      return `
+        <img
+          id="cloud-backup-icon"
+          src="images/upload.png"
+          style="width: 45px; height: 30px; cursor: pointer; display: none"
+          onclick="cloudSync(true)"
+        />
+        <img
+          src="images/copy.png"
+          style="width: 30px; height: 30px; cursor: pointer"
+          onclick="copyAllKnown()"
+        />
         <div>
-          <h1>${title}</h1>
-          <div>${JSON.stringify(words, undefined, 2)}</div>
+          <a href="https://www.opensubtitles.org/en/search/subs" target="_blank">
+            <img src="images/subtitles.png" style="width: 30px; height: 30px" />
+          </a>
         </div>
-      `;
-    }
-
-    function renderWordsToReview(sortedWords, withProcessing) {
-      return sortedWords.map(
-        ([word, examples]) => {
-          const matchingIrregularVerbs = window.wordsIrregularVerbs
-            .filter(
-              forms => forms.reduce((acc, form) => [...acc, ...form.split('/')], [])
-                .some(form => form.split('(').shift().trim() === word),
-            )
-            .map(forms => forms.join(' - '));
-          const labelIrregularVerb = matchingIrregularVerbs.length
-            ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #002370">(${matchingIrregularVerbs.join('; ')})</span>`
-            : '';
-
-          const matchingAdjectiveComparative = window.wordsAdjectiveComparatives
-            .filter(
-              forms => forms.reduce((acc, form, index) => index === 0 ? acc : [...acc, ...form.split('/')], [])
-                .some(form => form.split('(').shift().trim() === word),
-            )
-            .map(forms => forms.join(' - '));
-          const labelAdjectiveComparative = matchingAdjectiveComparative.length
-            ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #760083">(${matchingAdjectiveComparative.join('; ')})</span>`
-            : '';
-
-          const labelToLearnDuplicate = toLearnWordsDuplicates.includes(word)
-            ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #850000">(Already marked 'To learn &#129299;' previously)</span>`
-            : '';
-
-          const labelToReviewAgain = toReviewAlreadyKnownDuplicates.includes(word)
-            ? `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #196700">(Review again word that you know &#129321;)</span>`
-            : '';
-
-          const examplesButton = examples.length ? `<button onclick="showExamples('${escape(word)}') ">All Examples</button>` : '';
-          const actions = withProcessing ? `
-            <button onclick="addToKnown('${escape(word)}') ">I know &#129321;</button>
-            <button onclick="addToLearn('${escape(word)}') ">To learn &#129299;</button>
-            <button onclick="excludeWord('${escape(word)}') ">Exclude &#9940;</button>
-            <button onclick="skipWord('${escape(word)}') ">Skip &#129325;</button>
-          ` : '';
-
-          return `
-            <div id="wwword-${slugify(word)}">
-              <h3>${examples.length ? examples.length + 'x' : ''}   ${word} ${labelIrregularVerb} ${labelAdjectiveComparative} ${labelToLearnDuplicate} ${labelToReviewAgain}</h3>
-
-              ${examplesButton}
-              <button onclick="showIframe('${escape(word)}', 'https://wooordhunt.ru/word/${escape(word)}', { scrollTop: 250 }) ">Wooord Hunt</button>
-              <button onclick="showIframe('${escape(word)}', 'https://app.duocards.com/main/card/${escape(word)}', { height: 100 }) ">DuoCards</button>
-              <button onclick="showIframe('${escape(word)}', 'https://thesaurus.com/browse/${escape(word)}', { scrollTop: 150 }) ">Thesaurus</button>
-              <button onclick="closeResult('${escape(word)}') ">Close</button>
-&nbsp;&nbsp;&nbsp;&nbsp;
-
-              ${actions}
-
-              <div id="wwword-result-${slugify(word)}">
-                ${getExamplesHtml(word, 2)}
-              </div>
-            </div>
-            `;
-        },
-      )
-        .join('');
-    }
-
-    function renderForm() {
-      document.getElementById('form').innerHTML = `
-        <input id="subtitles-file" type="file" multiple />
-      `;
-
-      document.getElementById('stats').innerHTML = `
-        <h1>All I know &#129312;: ${knownWordsOld.length}</h1>
-        ${renderJsonWordsRow(`To learn words from other movies &#129300;: ${toLearnWordsOld.length}`, toLearnWordsOld)}
-        ${renderJsonWordsRow(`Exclude these words &#129322;: ${excludeWordsManualOld.length}`, excludeWordsManualOld)}
-      `;
-
-      const sortedWords = toLearnWordsOld.map(w => ([w, []])).sort(compareWords);
-      document.getElementById('words').innerHTML = renderWordsToReview(sortedWords, false);
-
-      document.getElementById('wordsProcessed').innerHTML = `
-        ${renderJsonWordsRow('All I know &#128519;:', knownWordsOld)}
-      `;
-
-      const input = document.getElementById('subtitles-file');
-      input.addEventListener('change', async (...args) => {
-        if (!input.files[0]) {
-          console.log('--------------------> NO FILE is selected');
-          return;
-        }
-
-        const files = await Promise.all([...input.files].map(file => new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.readAsText(file);
-
-          reader.onload = function () {
-            resolve(reader.result);
-          };
-
-          reader.onerror = function () {
-            console.log('FILE READ error ---> ', reader.error);
-
-            reject(reader.error);
-          };
-        })));
-
-        readSubs(files.join(' '));
-      }, false);
-    }
-
-    function renderRows() {
-      const sortedWords = [...wordsWithContext.entries()].sort(compareWords);
-
-      const allMovieWordsCount = (
-        sortedWords.length +
-        skipWordsAutoFromCommonExcludeList.length +
-        skipWordsAutoFromMyExcludeList.length +
-        alreadyKnownAuto.length +
-        toLearnWordsNew.length +
-        knownWordsNew.length +
-        excludeWordsManualNew.length +
-        skipWordsManual.length
-      );
-      const toReview = (
-        sortedWords.length +
-        toReviewAlreadyKnownDuplicates.length +
-        toLearnWordsDuplicates.length
-      );
-
-      document.getElementById('stats').innerHTML = `
         <div>
-          <h2>Overall Progress so far &#128520;</h2>
-          <div style="display: flex;">
-            <span style="flex: 1; text-align: left; ">Known &#129312;: ${knownWordsOld.length}</span>
-            <span style="flex: 1; text-align: left; ">To learn &#129299;: ${toLearnWordsOld.length}</span>
-            <span style="flex: 1; text-align: left; ">Excluded &#9940;: ${excludeWordsManualOld.length}</span>
-            <span style="flex: 1; text-align: left; ">&nbsp;</span>
-            <span style="flex: 1; text-align: left; ">&nbsp;</span>
-          </div>
-
-          <h2>Words in this movie &#128579;: ${allMovieWordsCount}</h2>
-          <div style="display: flex;">
-            <span style="flex: 1; text-align: left; ">Already known &#129312;: ${alreadyKnownAuto.length}</span>
-            <span style="flex: 1; text-align: left; ">Already set to learn &#129300;: ${toLearnWordsDuplicates.length}</span>
-            <span style="flex: 1; text-align: left; ">Excluded (my list)&#129322;: ${skipWordsAutoFromMyExcludeList.length}</span>
-            <span style="flex: 1; text-align: left; ">Excluded (auto)&#128511;&&#128509;: ${skipWordsAutoFromCommonExcludeList.length}</span>
-            <span style="flex: 1; text-align: left; ">&nbsp;</span>
-          </div>
-          <div style="display: flex;">
-            <span style="flex: 1; text-align: left; ">To review &#128517;: ${toReview}</span>
-            <span style="flex: 1; text-align: left; ">Known &#129321;: ${knownWordsNew.length}</span>
-            <span style="flex: 1; text-align: left; ">To learn &#129299;: ${toLearnWordsNew.length}</span>
-            <span style="flex: 1; text-align: left; ">Exluded &#9940;: ${excludeWordsManualNew.length}</span>
-            <span style="flex: 1; text-align: left; ">Skipped &#129325;: ${skipWordsManual.length}</span>
-          </div>
+          <a href="https://github.com/windok/subs-scanner" target="_blank">
+            <img src="images/github.png" style="width: 30px; height: 30px" />
+          </a>
         </div>
-      `;
+      </div>
+    </div>
 
-      document.getElementById('words').innerHTML = renderWordsToReview(sortedWords, true);
+    <div id="stats"></div>
+    <div id="words"></div>
+    <div id="wordsProcessed"></div>
 
-      document.getElementById('wordsProcessed').innerHTML = `
-        ${renderJsonWordsRow('New known words &#129321;', knownWordsNew)}
-        ${renderJsonWordsRow('To learn &#129299;:', toLearnWordsNew)}
-        ${renderJsonWordsRow('Excluded &#9940;:', excludeWordsManualNew)}
-        ${renderJsonWordsRow('Skipped &#129325;:', skipWordsManual)}
-        ${renderJsonWordsRow('All I know (for backup &#128519;):', [...knownWordsNew, ...knownWordsOld])}
-        ${renderJsonWordsRow('These I knew from other movies &#129312;:', alreadyKnownAuto)}
-        ${renderJsonWordsRow('Review to learn words from other movies &#129300;:', toLearnWordsOld)}
-        ${renderJsonWordsRow('Excluded from my list (auto)&#129322;:', skipWordsAutoFromMyExcludeList)}
-        ${renderJsonWordsRow('Excluded auto (names, geo, etc.) &#128511; & &#128509;:', skipWordsAutoFromCommonExcludeList)}
-        ${renderJsonWordsRow('Autocorrected words &#129488;:', autocorrectedWords)}
-      `;
-    }
-
-    window.onload = () => render();
-  </script>
-</head>
-
-<body>
-<div id="github" style="position: absolute; top: 5px; right: 5px; ">
-  <img src="upload.png" style="width: 45px; height: 30px; cursor: pointer" onclick="copyAllKnown()">
-  <a href="https://github.com/windok/subs-scanner">
-    <img src="github.png" style="width: 30px; height: 30px">
-  </a>
-</div>
-<!--<script src="google.js"></script>-->
-<!--<script src="https://accounts.google.com/gsi/client" async defer></script>-->
-<!--<div id="g_id_onload"-->
-<!--  data-client_id="1069804549642-eqdaumbemf26uln5hhje8utldgri74no.apps.googleusercontent.com"-->
-<!--  data-callback="handleClientLoad">-->
-<!--</div>-->
-<!--<div class="g_id_signin" data-type="standard"></div>-->
-<div id="form" style="display: block"></div>
-
-<!--<div id="google">-->
-<!--  <span id="google-username"></span>-->
-<!--  <button id="google-sign-in">Sign In</button>-->
-<!--  <button id="google-sign-out">Sign Out</button>-->
-<!--</div>-->
-
-<div id="stats"></div>
-<div id="words"></div>
-<div id="wordsProcessed"></div>
-</body>
+    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
+  </body>
 </html>

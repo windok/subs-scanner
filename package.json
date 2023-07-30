@@ -1,0 +1,9 @@
+{
+  "name": "subs-scanner",
+  "version": "0.0.1",
+  "description": "Subs Scanner",
+  "scripts": {},
+  "devDependencies": {
+    "prettier": "2.8.3"
+  }
+}
