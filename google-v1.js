@@ -122,16 +122,13 @@ async function getGDriveBackupFileMetadata() {
     q: 'trashed=false',
   });
 
-  const file = (listResponse?.result?.files || []).find(file => file.name === BACKUP_FILE_NAME);
-
-  return file;
+  return (listResponse?.result?.files || []).find(file => file.name === BACKUP_FILE_NAME);
 }
 
 /**
  *
  * @param jsonContent string
- * @param fileId [string]
- * @returns {string}
+ * @returns {Promise<void>}
  */
 async function uploadGDriveBackup(jsonContent) {
   const file = await getGDriveBackupFileMetadata();

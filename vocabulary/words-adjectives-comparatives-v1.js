@@ -203,3 +203,12 @@ window.wordsAdjectiveComparatives = [
   ['worthy', 'worthier', 'worthiest'],
   ['young', 'younger', 'youngest'],
 ];
+
+window.wordsAdjectiveComparativesList = [
+  ...new Set(
+    wordsAdjectiveComparatives.reduce(
+      (acc, forms) => [...acc, ...forms.reduce((acc2, w) => [...acc2, ...w.split('/')], [])],
+      []
+    )
+  ),
+];

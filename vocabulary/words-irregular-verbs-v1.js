@@ -1,4 +1,4 @@
-window.wordsIrregularVerbs  = [
+window.wordsIrregularVerbs = [
   ['arise', 'arose', 'arisen'],
   ['awake', 'awoke', 'awoken'],
   ['be', 'was/were', 'been'],
@@ -36,11 +36,13 @@ window.wordsIrregularVerbs  = [
   ['drink', 'drank', 'drunk'],
   ['drive', 'drove', 'driven'],
   ['eat', 'ate', 'eaten'],
+  ['earn', 'earnt/earned', 'earnt/earned'],
   ['fall', 'fell', 'fallen'],
   ['feed', 'fed', 'fed'],
   ['feel', 'felt', 'felt'],
   ['fight', 'fought', 'fought'],
   ['find', 'found', 'found'],
+  ['flee', 'fled', 'fled'],
   ['fly', 'flew', 'flown'],
   ['forbid', 'forbade', 'forbidden'],
   ['forget', 'forgot', 'forgotten'],
@@ -81,6 +83,7 @@ window.wordsIrregularVerbs  = [
   ['overtake', 'overtook', 'overtaken'],
   ['pay', 'paid', 'paid'],
   ['put', 'put', 'put'],
+  ['plead', 'pled/pleaded', 'pled/pleaded'],
   ['read', 'read', 'read'],
   ['ride', 'rode', 'ridden'],
   ['ring', 'rang', 'rung'],
@@ -89,6 +92,7 @@ window.wordsIrregularVerbs  = [
   ['saw', 'sawed', 'sawn/sawed'],
   ['say', 'said', 'said'],
   ['see', 'saw', 'seen'],
+  ['seek', 'sought', 'sought'],
   ['sell', 'sold', 'sold'],
   ['send', 'sent', 'sent'],
   ['set', 'set', 'set'],
@@ -140,4 +144,13 @@ window.wordsIrregularVerbs  = [
   ['win', 'won', 'won'],
   ['wind', 'wound', 'wound'],
   ['write', 'wrote', 'written'],
+];
+
+window.wordsIrregularVerbsList = [
+  ...new Set(
+    wordsIrregularVerbs.reduce(
+      (acc, forms) => [...acc, ...forms.reduce((acc2, w) => [...acc2, ...w.split('/')], [])],
+      []
+    )
+  ),
 ];

@@ -3,24 +3,34 @@
     <title>&#128049; Kitten's movies word parser and vocabulary</title>
     <link rel="shortcut icon" type="image/x-icon" href="favicon.ico" />
 
-    <script src="vocabulary/words-common.js"></script>
-    <script src="vocabulary/words-irregular-verbs.js"></script>
-    <script src="vocabulary/words-adjectives-comparatives.js"></script>
-    <script src="vocabulary/words-wooord-hunt-v10.js"></script>
+    <script src="vocabulary/words-common-v1.js"></script>
+    <script src="vocabulary/words-irregular-verbs-v1.js"></script>
+    <script src="vocabulary/words-adjectives-comparatives-v1.js"></script>
+    <script src="vocabulary/words-wooord-hunt-v11.js"></script>
     <script src="vocabulary/words-skip-common-v4.js"></script>
     <script src="vocabulary/words-skip-names-v9.js"></script>
     <script src="vocabulary/words-skip-geo-v4.js"></script>
 
-    <script src="utils.js"></script>
-    <script src="sync.js"></script>
-    <script src="google.js"></script>
+    <script src="utils-v1.js"></script>
+    <script src="sync-v1.js"></script>
+    <script src="google-v1.js"></script>
 
     <script>
       const excludeWordsWithDot = ['Dr.', 'Mr.', 'Ms.', 'Mrs.'];
-      const wordsLibraryAll = [...window.wordsCommon, ...window.wordsWooordHunt];
+      const wordsLibraryAll = [
+        ...window.wordsCommon,
+        ...window.wordsWooordHunt,
+        ...window.wordsIrregularVerbsList,
+        ...window.wordsAdjectiveComparativesList,
+      ];
       const wordsLibraryLowercased = wordsLibraryAll.map(w => w.toLowerCase());
 
-      const localStorageData = readFromLocalStorage();
+      let filesContent = '';
+      let includeVocabularyWords = true;
+      let includeNonVocabularyWords = false;
+      let reviewWordsQty = 20;
+
+      let localStorageData = readFromLocalStorage();
 
       let version = localStorageData.version;
       let nextVersion = version + 1;
@@ -38,15 +48,41 @@
       let toLearnWordsOld = localStorageData.toLearnWords;
       let toLearnWordsNew = [];
 
-      const skipWordsManual = [];
-      const skipWordsAutoFromMyExcludeList = [];
-      const skipWordsAutoFromCommonExcludeList = [];
+      let skipWordsManual = [];
+      let skipWordsAutoFromMyExcludeList = [];
+      let skipWordsAutoFromCommonExcludeList = [];
 
-      let reviewWordsQty = 20;
       let alreadyKnownAuto = [];
       let toReviewAlreadyKnownDuplicates = [];
       let toLearnWordsDuplicates = [];
       let autocorrectedWords = [];
+
+      function resetToInitials() {
+        localStorageData = readFromLocalStorage();
+
+        version = localStorageData.version;
+        nextVersion = version + 1;
+
+        wordsWithContext = new Map();
+
+        knownWordsOld = localStorageData.knownWords;
+        knownWordsNew = [];
+
+        excludeWordsManualOld = localStorageData.excludeWords;
+        excludeWordsManualNew = [];
+
+        toLearnWordsOld = localStorageData.toLearnWords;
+        toLearnWordsNew = [];
+
+        skipWordsManual = [];
+        skipWordsAutoFromMyExcludeList = [];
+        skipWordsAutoFromCommonExcludeList = [];
+
+        alreadyKnownAuto = [];
+        toReviewAlreadyKnownDuplicates = [];
+        toLearnWordsDuplicates = [];
+        autocorrectedWords = [];
+      }
 
       function writeLocalBackupIfSyncRequired() {
         if (!isLocalSyncRequired) {
@@ -123,8 +159,8 @@
           );
       }
 
-      setInterval(writeLocalBackupIfSyncRequired, 60 * 1000); // every minute
-      setInterval(cloudSync, 5 * 60 * 1000); // every 5 minutes
+      setInterval(writeLocalBackupIfSyncRequired, 60 * 1000);
+      setInterval(cloudSync, 3 * 60 * 1000);
 
       function parseSentences(str) {
         const sentences = [];
@@ -245,6 +281,13 @@
               key !== initial && (autocorrectionApplied = true);
             }
 
+            // e.g. elves -> elf
+            if (!autocorrectionApplied && key.endsWith('ves')) {
+              const initial = key;
+              key = applyCorrection(key, key.slice(0, key.length - 3) + 'f');
+              key !== initial && (autocorrectionApplied = true);
+            }
+
             if (
               !autocorrectionApplied &&
               key.endsWith('ed') &&
@@ -312,6 +355,14 @@
           }
         }
 
+        for (const key of wordsWithContext.keys()) {
+          if (wordsLibraryLowercased.includes(key)) {
+            !includeVocabularyWords && wordsWithContext.delete(key);
+          } else {
+            !includeNonVocabularyWords && wordsWithContext.delete(key);
+          }
+        }
+
         // check words that are not used in examples the way it was autocorrected
         [...wordsWithContext.entries()]
           .filter(([key, examples]) => !examples.some(e => e.includes(key)))
@@ -370,7 +421,7 @@
 
         toReviewAlreadyKnownDuplicates = shuffleArray(
           // only words with less than 15 examples
-          alreadyKnownAuto.filter(key => wordsWithContext.get(key).length <= 15)
+          alreadyKnownAuto.filter(key => (wordsWithContext.get(key) || []).length <= 15)
         ).slice(0, reviewWordsQty);
 
         [...wordsWithContext.keys()].forEach(key => {
@@ -384,25 +435,8 @@
         return wordsWithContext;
       }
 
-      window.readSubs = (subsString, knownWordsList) => {
-        if (knownWordsList) {
-          try {
-            const knownWordsParsed = Array.isArray(knownWordsList)
-              ? knownWordsList
-              : JSON.parse(knownWordsList);
-
-            if (
-              Array.isArray(knownWordsParsed) &&
-              knownWordsParsed.every(w => typeof w === 'string')
-            ) {
-              knownWordsOld = knownWordsParsed;
-            } else {
-              console.error('INCORRECT FORMAT OF known words list');
-            }
-          } catch (error) {
-            console.error('INCORRECT FORMAT OF known words list', error);
-          }
-        }
+      window.readSubs = subsString => {
+        resetToInitials();
 
         const subs = subsString
           .replaceAll(/^\d+$/gim, '')
@@ -578,11 +612,13 @@
       }
 
       function render() {
-        if (!wordsWithContext.size) {
+        if (!wordsWithContext.size && !filesContent) {
           document.getElementById('form').style.setProperty('display', 'block');
+          document.getElementById('controls').style.setProperty('display', 'none');
           renderForm();
         } else {
           document.getElementById('form').style.setProperty('display', 'none');
+          document.getElementById('controls').style.setProperty('display', 'block');
           renderRows();
         }
       }
@@ -684,16 +720,20 @@
           .join('');
       }
 
-      function onChangeReviewQty() {
+      async function onChangeControls() {
         reviewWordsQty = +document.getElementById('review-qty').value;
+        includeVocabularyWords = document.getElementById('includeVocabularyWords').checked;
+        includeNonVocabularyWords = document.getElementById('includeNonVocabularyWords').checked;
+
+        await cloudSync();
+
+        readSubs(filesContent);
       }
 
       function renderForm() {
         document.getElementById('form').innerHTML = `
               <button style="display: inline-block; width:120px; height:30px; margin: 0 20px" onclick="document.getElementById('subtitles-file').click()">Select .srt file(s)</button>
               <input id="subtitles-file" type="file" multiple style="display:none" />
-              <label>Known words to repeat: </label>
-              <input id="review-qty" type="number" value="${reviewWordsQty}" style="width: 50px" onchange="onChangeReviewQty()"/>
             `;
 
         document.getElementById('stats').innerHTML = `
@@ -744,7 +784,9 @@
               )
             );
 
-            readSubs(files.join(' '));
+            filesContent = files.join(' ');
+
+            readSubs(filesContent);
           },
           false
         );
@@ -766,6 +808,25 @@
           sortedWords.length +
           toReviewAlreadyKnownDuplicates.length +
           toLearnWordsDuplicates.length;
+
+        document.getElementById('controls').innerHTML = `
+          <div>
+            <div>
+              <label>Include vocabulary words</label>
+              <input id="includeVocabularyWords" type="checkbox" onchange="onChangeControls()" />
+            </div>
+            <div>
+              <label>Include non-vocabulary words</label>
+              <input id="includeNonVocabularyWords" type="checkbox" onchange="onChangeControls()" />
+            </div>
+            <div>
+              <label>Known words to repeat: </label>
+              <input id="review-qty" type="number" value="${reviewWordsQty}" style="width: 50px" onchange="onChangeControls()"/>
+            </div>
+          </div>
+        `;
+        document.getElementById('includeVocabularyWords').checked = includeVocabularyWords;
+        document.getElementById('includeNonVocabularyWords').checked = includeNonVocabularyWords;
 
         document.getElementById('stats').innerHTML = `
               <div>
@@ -839,6 +900,7 @@
     <div style="display: flex; justify-content: space-between; align-items: center">
       <div>
         <div id="form" style="display: block"></div>
+        <div id="controls" style="display: none"></div>
       </div>
 
       <div style="display: flex; align-items: center; gap: 10px">

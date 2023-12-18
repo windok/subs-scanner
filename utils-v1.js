@@ -49,6 +49,11 @@ function applyCorrection(word, candidate) {
   }
 }
 
+function getWordIndex(word, wordList = []) {
+  const index = wordList.indexOf(word);
+  return index >= 0 ? index : Number.MAX_SAFE_INTEGER;
+}
+
 function compareWords([a, aExamples], [b, bExamples]) {
   // sort by examples in DESC order
   const examplesResult = bExamples.length - aExamples.length;
@@ -58,16 +63,22 @@ function compareWords([a, aExamples], [b, bExamples]) {
   }
 
   // sort by index in ASC order
-  let aCommonIndex = window.wordsCommon.indexOf(a);
-  let bCommonIndex = window.wordsCommon.indexOf(b);
-  aCommonIndex = aCommonIndex >= 0 ? aCommonIndex : Number.MAX_SAFE_INTEGER;
-  bCommonIndex = bCommonIndex >= 0 ? bCommonIndex : Number.MAX_SAFE_INTEGER;
+  let aCommonIndex = getWordIndex(a, window.wordsCommon);
+  let bCommonIndex = getWordIndex(b, window.wordsCommon);
 
   if (aCommonIndex === Number.MAX_SAFE_INTEGER && bCommonIndex === Number.MAX_SAFE_INTEGER) {
-    aCommonIndex = window.wordsWooordHunt.indexOf(a);
-    bCommonIndex = window.wordsWooordHunt.indexOf(b);
-    aCommonIndex = aCommonIndex >= 0 ? aCommonIndex : Number.MAX_SAFE_INTEGER;
-    bCommonIndex = bCommonIndex >= 0 ? bCommonIndex : Number.MAX_SAFE_INTEGER;
+    aCommonIndex = getWordIndex(a, window.wordsWooordHunt);
+    bCommonIndex = getWordIndex(b, window.wordsWooordHunt);
+  }
+
+  if (aCommonIndex === Number.MAX_SAFE_INTEGER && bCommonIndex === Number.MAX_SAFE_INTEGER) {
+    aCommonIndex = getWordIndex(a, window.wordsIrregularVerbsList);
+    bCommonIndex = getWordIndex(b, window.wordsIrregularVerbsList);
+  }
+
+  if (aCommonIndex === Number.MAX_SAFE_INTEGER && bCommonIndex === Number.MAX_SAFE_INTEGER) {
+    aCommonIndex = getWordIndex(a, window.wordsAdjectiveComparativesList);
+    bCommonIndex = getWordIndex(b, window.wordsAdjectiveComparativesList);
   }
 
   return aCommonIndex - bCommonIndex;
