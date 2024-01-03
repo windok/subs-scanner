@@ -6,9 +6,9 @@
     <script src="vocabulary/words-common-v1.js"></script>
     <script src="vocabulary/words-irregular-verbs-v1.js"></script>
     <script src="vocabulary/words-adjectives-comparatives-v1.js"></script>
-    <script src="vocabulary/words-wooord-hunt-v11.js"></script>
+    <script src="vocabulary/words-wooord-hunt-v12.js"></script>
     <script src="vocabulary/words-skip-common-v4.js"></script>
-    <script src="vocabulary/words-skip-names-v9.js"></script>
+    <script src="vocabulary/words-skip-names-v10.js"></script>
     <script src="vocabulary/words-skip-geo-v4.js"></script>
 
     <script src="utils-v1.js"></script>
@@ -185,7 +185,9 @@
 
               if (
                 isLastChar ||
-                (sanitized.length === 1 && isUpperCase(sanitized) && str[j + 1] !== '.')
+                (sanitized.length === 1 &&
+                  (isUpperCase(sanitized) || sanitized === '(') &&
+                  str[j + 1] !== '.')
               ) {
                 sentences.push(sentence.trim());
                 sentence = '';
@@ -339,6 +341,14 @@
               key = applyCorrection(key, key.slice(4));
             }
 
+            if (key.startsWith("'")) {
+              key = applyCorrection(key, key.slice(1).toLowerCase());
+            }
+
+            if (key.endsWith("'")) {
+              key = applyCorrection(key, key.slice(0, key.length - 1).toLowerCase());
+            }
+
             if (key.endsWith("'s")) {
               key = key.slice(0, key.length - 2);
             }
@@ -447,8 +457,16 @@
           .replaceAll('\r', ' ')
           .replaceAll('\xa0', ' ') // unbreakable whitespace
           .replaceAll(/\u2010/g, '-')
+          .replaceAll(/\u2018/g, "'")
+          .replaceAll(/\u2019/g, "'")
+          .replaceAll(/\u201C/g, '"')
+          .replaceAll(/\u201D/g, '"')
+          .replaceAll(/\u2026/g, '...')
           .replaceAll('[', '(')
           .replaceAll(']', ')')
+          .replaceAll('’', "'")
+          .replaceAll('“', '"')
+          .replaceAll('”', '"')
           .replaceAll('  ', ' ')
           .replaceAll('  ', ' ')
           .replaceAll('  ', ' ');
@@ -725,7 +743,12 @@
         includeVocabularyWords = document.getElementById('includeVocabularyWords').checked;
         includeNonVocabularyWords = document.getElementById('includeNonVocabularyWords').checked;
 
-        await cloudSync();
+        try {
+          await cloudSync();
+        } catch (error) {
+          console.error('CLOUD SYNC ERROR:');
+          console.error(error);
+        }
 
         readSubs(filesContent);
       }
